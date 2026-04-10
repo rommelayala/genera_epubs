@@ -83,6 +83,8 @@ Una vez ejecutado el comando con éxito, el script realizará en automático las
 ✅ Generado: ./epubs_generados/agentes-ia-libro_20260410_212651.epub
 ```
 
-> **Portadas Automáticas**: El script crea y utiliza una carpeta `portadas_draft`. Para añadir una portada a tu libro, coloca una imagen (`.jpg` o `.png`) en esta carpeta con el **mismo nombre exacto** que tu archivo `.md`. El script la detectará e integrará automáticamente en el EPUB. Si no se encuentra una imagen, se utilizará la portada por defecto de Pandoc.
+> **Portadas Especificadas**: El script crea y utiliza una carpeta `portadas_draft/`. Para añadir una portada a tu libro, coloca una imagen (`.jpg` o `.png`) en esa carpeta y pasa su nombre como **segundo argumento** al ejecutar el script. 
+> Ejemplo: `./generate_epub.sh mi_libro.md mi_portada.jpg`
+> Si no pasas un segundo argumento, el script la omitirá y utilizará la portada por defecto de Pandoc.
 > 
 > **Personalización Extra**: Dentro de las llamadas internas de Pandoc en el script fuente `generate_epub.sh`, existe un parámetro comentado que te permitirá añadir rápidamente reglas de estilos inyectables **(`--css`)**.
