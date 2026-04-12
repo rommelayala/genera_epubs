@@ -39,18 +39,23 @@ Al inicio de cada sesión pégalo y di: **"Contexto cargado, continuamos."**
 ## 5. PROYECTOS ACTIVOS
 
 ### 📚 Pipeline de Libros EPUB
-- **Ruta:** `vaults-Obs/Libros/genera_epubs/`
-- **Script:** `generate_epub.sh` — convierte `.md` a EPUB con pandoc
+- **Ruta:** `/home/rommel/Documents/project/genera_epubs/`
+- **Script actual:** `generate_epub.sh` — convierte `.md` a EPUB con pandoc
 - **Uso:**
   - `./generate_epub.sh` → genera todos los libros
   - `./generate_epub.sh nombre-archivo.md` → genera uno específico
   - Archivo inexistente → error + lista los disponibles
-- **Borradores en:** `libros_draft/`
-  - `fundamentos-ia-libro.md` (~90% completo) ✅ EPUB generado 20260322
-  - `playwright-ts-intermedio-avanzado.md` (~90% completo) ✅ EPUB generado 20260322
-  - `agentes-ia-libro.md` — se añadió PARTE III (Contexto Persistente) ✅ EPUB generado 20260322
-  - `skills-libro.md` (~40% completo) ✅ EPUB generado 20260322
-- **Output:** `epubs_generados/` (con timestamp `YYYYMMDD_HHMMSS`)
+- **Borradores en:** `libros_draft/` (✅ EPUB generado 2026-04-10)
+  - `fundamentos-ia-libro.md`
+  - `playwright-ts-intermedio-avanzado.md`
+  - `agentes-ia-libro.md` (con PARTE III — Contexto Persistente)
+  - `skills-libro.md`
+  - `claude-uso-maestro.md` 🆕
+  - `gemini-uso-maestro.md` 🆕
+  - `gemini-nano-on-device-ai.md` 🆕
+- **Output:** `epubs_generados/` (con timestamp `YYYYMMDD_HHMMSS`); versiones viejas en `Z-old_version/`
+- **Portadas:** `generate_minimal_covers.py` + `portadas_draft/`
+- **Plan en curso:** migración de `generate_epub.sh` a CLI Python (`Documentacion/planes/plan-migracion-python.md`) — añade metadata YAML sidecar, portadas configurables y soporte de entrada `.pdf` vía `ebook-convert` (Calibre) además de `.md` vía pandoc.
 - **Contexto portable:** `context/CONTEXT.md` ← este archivo
 
 ### 🌐 Landing Page AIQ®
@@ -70,4 +75,4 @@ Al inicio de cada sesión pégalo y di: **"Contexto cargado, continuamos."**
 
 ---
 
-*Última actualización: 2026-03-22 16:44*
+*Última actualización: 2026-04-11*

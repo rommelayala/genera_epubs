@@ -6,9 +6,46 @@ COVERS_DIR="$(dirname "$0")/portadas_draft"
 OUTPUT_DIR="$(dirname "$0")/epubs_generados"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
+# Detectar sistema operativo y sugerir comando de instalación apropiado
+detect_install_cmd() {
+  local pkg="$1"
+  case "$(uname -s)" in
+    Darwin)
+      if command -v brew &> /dev/null; then
+        echo "brew install $pkg"
+      else
+        echo "Instala Homebrew desde https://brew.sh y luego: brew install $pkg"
+      fi
+      ;;
+    Linux)
+      if command -v apt-get &> /dev/null; then
+        echo "sudo apt-get install -y $pkg"
+      elif command -v dnf &> /dev/null; then
+        echo "sudo dnf install -y $pkg"
+      elif command -v pacman &> /dev/null; then
+        echo "sudo pacman -S --noconfirm $pkg"
+      elif command -v zypper &> /dev/null; then
+        echo "sudo zypper install -y $pkg"
+      elif command -v apk &> /dev/null; then
+        echo "sudo apk add $pkg"
+      else
+        echo "Instala '$pkg' con el gestor de paquetes de tu distro"
+      fi
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      echo "Windows detectado. Instala '$pkg' con: winget install $pkg  (o choco install $pkg)"
+      ;;
+    *)
+      echo "SO no reconocido ($(uname -s)). Instala '$pkg' manualmente."
+      ;;
+  esac
+}
+
 # Validar pandoc
 if ! command -v pandoc &> /dev/null; then
-  echo "❌ Error: pandoc no está instalado. Ejecuta: brew install pandoc"
+  echo "❌ Error: pandoc no está instalado."
+  echo "   Sistema detectado: $(uname -s)"
+  echo "   Instálalo con: $(detect_install_cmd pandoc)"
   exit 1
 fi
 
