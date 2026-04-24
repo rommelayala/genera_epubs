@@ -1,0 +1,156 @@
+{
+  "project": "genera_epubs",
+  "branchName": "ralph/migracion-python-epub-generator",
+  "description": "Migración a Python — Reemplazar generate_epub.sh como motor de generación por un CLI extensible con soporte multi-formato (.md y .pdf), metadata YAML sidecar y portadas configurables",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Crear requirements.txt y estructura de paquete epub_generator",
+      "description": "Como desarrollador, necesito la estructura base del paquete Python y las dependencias declaradas para poder construir sobre ellas.",
+      "acceptanceCriteria": [
+        "Archivo requirements.txt contiene Pillow>=10.0.0 y PyYAML>=6.0",
+        "Directorio epub_generator/ existe con __init__.py vacío",
+        "Directorio epub_generator/converters/ existe con __init__.py vacío",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Implementar epub_generator/config.py — lectura de YAML sidecar",
+      "description": "Como desarrollador, necesito leer la configuración por libro desde un archivo YAML sidecar con fallback a defaults definidos en dataclasses.",
+      "acceptanceCriteria": [
+        "Dataclass BookConfig con campos: title='Untitled', author='Rommel Ayala - QA Lead', description='', language='es-ES', date=''",
+        "Dataclass CoverConfig con campos: title='', subtitle='', bg_color='#151515', text_color='#EAEAEA', accent_color='#4A4A4A', title_size=42, subtitle_size=24, footer='© Rommel Ayala - All rights reserved'",
+        "BookConfig.cover es de tipo CoverConfig con field(default_factory=CoverConfig)",
+        "Función load_config(input_path: Path) -> BookConfig busca {basename}.yaml junto al archivo de entrada",
+        "Si el .yaml no existe, devuelve BookConfig con defaults",
+        "Si el .yaml existe pero le faltan campos, usa defaults para los campos ausentes",
+        "Si el .yaml tiene sintaxis inválida, lanza excepción con mensaje descriptivo que incluye el nombre del archivo y la línea del error",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Implementar epub_generator/cover.py — generación de portadas con Pillow",
+      "description": "Como desarrollador, necesito generar portadas JPG desde la configuración del YAML usando Pillow, con text wrapping y respetando portadas manuales existentes.",
+      "acceptanceCriteria": [
+        "Función generate_cover(basename: str, config: BookConfig, output_dir: Path) -> Path",
+        "Genera imagen de 600x800px con fondo bg_color",
+        "Renderiza title con title_size pt en color text_color, centrado verticalmente en el tercio superior",
+        "Renderiza subtitle con subtitle_size pt si no está vacío",
+        "Dibuja línea horizontal en accent_color en la parte inferior",
+        "Renderiza footer en 16pt con accent_color",
+        "Usa textwrap.wrap() para títulos largos que excedan el ancho del canvas",
+        "Carga fuentes desde fonts/Inter-Regular.ttf y fonts/Inter-Bold.ttf (ruta relativa al proyecto)",
+        "Si ya existe portadas_draft/{basename}.jpg, NO la sobreescribe y retorna la ruta existente",
+        "Guarda la portada generada en portadas_draft/{basename}.jpg",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Implementar epub_generator/converters/markdown.py — wrapper pandoc",
+      "description": "Como desarrollador, necesito un wrapper que convierta archivos .md a .epub usando pandoc con la metadata y portada del BookConfig.",
+      "acceptanceCriteria": [
+        "Función convert_markdown(input_path: Path, config: BookConfig, cover: Path, output: Path) -> None",
+        "Construye y ejecuta comando pandoc con: --to=epub3, --toc, --toc-depth=2, --metadata title, --metadata author, --metadata language, --epub-cover-image, --syntax-highlighting=espresso",
+        "Ejecuta vía subprocess.run con check=True",
+        "Si pandoc falla, propaga la excepción con stdout/stderr del proceso",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Implementar epub_generator/converters/pdf.py — wrapper ebook-convert",
+      "description": "Como desarrollador, necesito un wrapper que convierta archivos .pdf a .epub usando ebook-convert de Calibre con la metadata y portada del BookConfig.",
+      "acceptanceCriteria": [
+        "Función convert_pdf(input_path: Path, config: BookConfig, cover: Path, output: Path) -> None",
+        "Construye y ejecuta comando ebook-convert con flags: --title, --authors, --language, --cover, --comments",
+        "Ejecuta vía subprocess.run con check=True",
+        "Si ebook-convert falla, propaga la excepción con stdout/stderr del proceso",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Implementar epub_generator/generator.py — dispatcher por extensión",
+      "description": "Como desarrollador, necesito un dispatcher que reciba un archivo de entrada y delegue al converter correcto según la extensión.",
+      "acceptanceCriteria": [
+        "Diccionario CONVERTERS mapeando '.md' -> convert_markdown y '.pdf' -> convert_pdf",
+        "Función generate(input_path: Path, config: BookConfig, cover: Path, output: Path) -> None",
+        "Delega a converter según input_path.suffix.lower()",
+        "Si la extensión no está en CONVERTERS, lanza ValueError con mensaje 'Formato no soportado: {ext}'",
+        "Output en epubs_generados/{basename}.epub (sin timestamp)",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Implementar generate_epub.py — CLI + orquestador paralelo",
+      "description": "Como usuario, necesito un entry point CLI que descubra los libros en libros_draft/, lea su configuración, genere portadas y los convierta en paralelo.",
+      "acceptanceCriteria": [
+        "Usa argparse: sin args procesa todos los .md y .pdf en libros_draft/; con arg procesa el archivo específico (acepta con o sin extensión, con o sin path)",
+        "Descubre archivos .md y .pdf en libros_draft/",
+        "Lanza la generación en paralelo con ThreadPoolExecutor",
+        "Cadena de precedencia de portada: (1) CLI 2º arg, (2) YAML cover.image, (3) portadas_draft/{basename}.jpg, (4) generada con Pillow",
+        "Logging con formato '[{book_name}] {message}' para identificar líneas por libro en salida paralela",
+        "Errores en un libro no detienen el resto del batch",
+        "Reporta al final: '✨ N/M libros generados' o '⚠️ N/M libros generados. Revisa los errores arriba.'",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Actualizar generate_epub.sh — launcher con checks y venv",
+      "description": "Como usuario, necesito que el launcher bash verifique dependencias del sistema, gestione el venv Python, descargue fuentes Inter y delegue a generate_epub.py.",
+      "acceptanceCriteria": [
+        "Verifica pandoc; si falta, imprime comando de instalación específico por OS (apt/brew) y sale con error",
+        "Verifica ebook-convert solo si hay archivos .pdf en libros_draft/; si falta, imprime comando de instalación y opción de procesar solo .md",
+        "Función check_fonts: verifica fonts/Inter-Regular.ttf y fonts/Inter-Bold.ttf; si faltan, descarga Inter-4.0.zip desde GitHub con curl, extrae los TTF y los coloca en fonts/; idempotente",
+        "Si curl no está disponible y faltan fuentes, sale con error claro",
+        "Crea venv en .venv/ si no existe y ejecuta pip install -r requirements.txt",
+        "Pasa todos los argumentos sin modificar a generate_epub.py",
+        "Sin lógica de negocio en el bash",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Actualizar .gitignore y deprecar generate_minimal_covers.py",
+      "description": "Como desarrollador, necesito que el .gitignore esté actualizado y que el script obsoleto quede marcado o eliminado.",
+      "acceptanceCriteria": [
+        ".gitignore incluye: .venv/, __pycache__/, *.pyc, .DS_Store",
+        "epubs_generados/ y portadas_draft/*.jpg NO están en .gitignore (entran a git)",
+        "generate_minimal_covers.py eliminado del repositorio o con comentario de deprecación prominente en la primera línea",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

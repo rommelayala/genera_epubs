@@ -1925,6 +1925,62 @@ When intenta iniciar sesión con credenciales válidas
 Then es redirigido a su "Dashboard Principal"
 ```
 
+## Setup e Instalación
+
+Antes de escribir un solo step necesitas instalar el stack completo. Esta es la combinación probada:
+
+```bash
+npm install --save-dev @cucumber/cucumber @playwright/test ts-node
+```
+
+Y si quieres reportes HTML nativos de Cucumber:
+
+```bash
+npm install --save-dev @cucumber/html-formatter
+```
+
+El `package.json` debe tener al menos estos scripts:
+
+```json
+{
+  "scripts": {
+    "test":        "cucumber-js",
+    "test:smoke":  "cucumber-js --profile smoke",
+    "test:ci":     "cucumber-js --profile ci",
+    "test:debug":  "cucumber-js --profile debug"
+  }
+}
+```
+
+### `tsconfig.json` — ajustes para convivir con Cucumber
+
+Cucumber carga los steps con `ts-node`. Añade o ajusta estas opciones:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@pages/*":  ["pages/*"],
+      "@steps/*":  ["steps/*"],
+      "@support/*": ["support/*"]
+    }
+  },
+  "ts-node": {
+    "transpileOnly": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"]
+}
+```
+
+`transpileOnly: true` en `ts-node` es importante: omite el chequeo de tipos en runtime y hace que Cucumber arranque mucho más rápido. Los tipos los sigue verificando tu IDE y tu pipeline de build, no el runner.
+
 ## Arquitectura de la Capa Cucumber
 
 Para trabajar correctamente con Playwright y Cucumber, la estructura recomendada separa BDD, step definitions y el modelo de páginas (POM):
@@ -1932,16 +1988,25 @@ Para trabajar correctamente con Playwright y Cucumber, la estructura recomendada
 ```text
 proyecto_bdd/
 ├── features/
-│   └── login.feature              ← Gherkin puro (El QUÉ)
+│   ├── login.feature              ← Gherkin puro (El QUÉ)
+│   └── checkout.feature
 ├── steps/
-│   ├── world.ts                   ← El contexto global (CustomWorld de Cucumber)
-│   ├── hooks.ts                   ← Config de inicio/cierre de Playwright
-│   └── login.steps.ts             ← Conecta Gherkin con Playwright + POM (El PEGAMENTO)
-├── pages/                         ← Tu POM existente (El CÓMO)
-└── cucumber.js                    ← Configuración del runner Cucumber
+│   ├── world.ts                   ← Contexto global tipado (CustomWorld)
+│   ├── hooks.ts                   ← Ciclo de vida de Playwright
+│   ├── login.steps.ts             ← Steps de autenticación
+│   └── checkout.steps.ts
+├── pages/                         ← Tu POM (El CÓMO)
+│   ├── LoginPage.ts
+│   └── CheckoutPage.ts
+├── support/
+│   └── api.client.ts              ← Cliente HTTP reutilizable
+├── cucumber.js                    ← Perfiles y configuración del runner
+└── tsconfig.json
 ```
 
-## 1. El Feature (feature file)
+## 1. El Feature (Gherkin avanzado)
+
+### Scenario básico
 
 ```gherkin
 Feature: Autenticación de Usuarios
@@ -1952,17 +2017,90 @@ Feature: Autenticación de Usuarios
     Then es redirigido correctamente al Dashboard
 ```
 
+### Background — pasos compartidos en el feature
+
+`Background` se ejecuta antes de cada `Scenario` del mismo feature. Úsalo para el setup que comparten todos los escenarios, no para lógica de negocio compleja.
+
+```gherkin
+Feature: Gestión de Carrito
+
+  Background:
+    Given el usuario ha iniciado sesión como "Cliente"
+    And está en la página de productos
+
+  Scenario: Añadir un producto al carrito
+    When selecciona el producto "Zapatillas Pro"
+    Then el carrito muestra 1 artículo
+
+  Scenario: Vaciar el carrito
+    Given ha añadido 3 productos
+    When vacía el carrito
+    Then el carrito muestra 0 artículos
+```
+
+### Scenario Outline — escenarios parametrizados
+
+Cuando el mismo flujo debe probarse con distintos datos, `Scenario Outline` + `Examples` evita duplicar escenarios. Es el equivalente en Gherkin a los `@DataProvider` de TestNG o los `test.each` de Jest.
+
+```gherkin
+Feature: Validación de login
+
+  Scenario Outline: Inicio de sesión con distintos roles
+    Given el usuario navega a la página de login
+    When ingresa credenciales del rol "<rol>"
+    Then es redirigido a "<destino>"
+    And el menú lateral muestra la sección "<seccion>"
+
+    Examples:
+      | rol           | destino              | seccion         |
+      | Administrador | /admin/dashboard     | Gestión usuarios|
+      | Cliente       | /home                | Mis pedidos     |
+      | Auditor       | /reports             | Informes        |
+```
+
+Cucumber instancia un `Scenario` independiente por cada fila de `Examples`. Cada uno corre aislado con su propio `Before`/`After`.
+
+### Data Tables — datos estructurados en un step
+
+Cuando un step recibe una tabla de datos (no un simple valor), usa `DataTable`:
+
+```gherkin
+Scenario: Crear un usuario con datos completos
+  Given existe un usuario con los siguientes datos:
+    | campo     | valor              |
+    | nombre    | Ana García         |
+    | email     | ana@test.com       |
+    | rol       | Editor             |
+    | activo    | true               |
+  Then el usuario aparece en el listado de administración
+```
+
+```typescript
+// steps/users.steps.ts
+import { Given } from '@cucumber/cucumber';
+import { DataTable } from '@cucumber/cucumber';
+
+Given('existe un usuario con los siguientes datos:', async function (table: DataTable) {
+  const data = table.rowsHash(); // { campo: valor, ... }
+  console.log('[users.steps] Creando usuario:', data);
+  // data.nombre → "Ana García", data.email → "ana@test.com"
+  await this.page.goto('/admin/users/new');
+  await this.page.fill('#nombre', data['nombre']);
+  await this.page.fill('#email', data['email']);
+  await this.page.selectOption('#rol', data['rol']);
+  await this.page.click('[type="submit"]');
+});
+```
+
 ## 2. Los Step Definitions (El Puente)
 
-Usando paquetes como `@cucumber/cucumber` (para Node) y reutilizando el POM que creaste antes. 
-A diferencia del runner nativo de Playwright (que inyecta `page` como un fixture), en Cucumber empleamos el estado global inyectado por el **Custom World**:
+A diferencia del runner nativo de Playwright (que inyecta `page` como fixture), en Cucumber `page` vive en `this` — el `CustomWorld` que configuramos más adelante.
 
 ```typescript
 // steps/login.steps.ts
 import { Given, When, Then } from '@cucumber/cucumber';
 import { expect } from '@playwright/test';
-import { LoginPage } from '../pages/LoginPage';
-// Aquí "this" hace referencia a nuestro CustomWorld que ya levantó "this.page"
+import { LoginPage } from '@pages/LoginPage';
 
 Given('el usuario navega a la página de login', async function () {
   const loginPage = new LoginPage(this.page);
@@ -1971,61 +2109,575 @@ Given('el usuario navega a la página de login', async function () {
 
 When('ingresa credenciales válidas de {string}', async function (userType: string) {
   const loginPage = new LoginPage(this.page);
-  
-  // Usamos lógica de negocio para traducir el userType a data real
-  const userMap: Record<string, { email: string, pass: string }> = {
-    'Administrador': { email: 'admin@test.com', pass: 'Admin123!' },
-    'Estandar': { email: 'user@test.com', pass: 'User123!' }
+
+  const userMap: Record<string, { email: string; pass: string }> = {
+    Administrador: { email: 'admin@test.com', pass: 'Admin123!' },
+    Cliente:       { email: 'user@test.com',  pass: 'User123!'  },
+    Auditor:       { email: 'audit@test.com', pass: 'Audit123!' },
   };
-  
-  const { email, pass } = userMap[userType];
-  await loginPage.login(email, pass);
+
+  const credentials = userMap[userType];
+  if (!credentials) throw new Error(`Rol desconocido: ${userType}`);
+
+  await loginPage.login(credentials.email, credentials.pass);
 });
 
 Then('es redirigido correctamente al Dashboard', async function () {
-  // Verificamos el estado o URL del Dashboard, aislando aserciones.
   await expect(this.page).toHaveURL(/.*dashboard/);
 });
 ```
 
-## 3. El Contexto Global ("World" y Hooks)
+## 3. El CustomWorld — Tipado correcto en TypeScript
 
-Cucumber utiliza un patrón llamado `World` para compartir contexto (como tu instancia de `page` y `browser`) a través de los steps de un mismo escenario. Deberás configurar un `Before` y un `After` en tus "Hooks" para inicializar Playwright por debajo.
+El `World` es el objeto `this` disponible en todos los steps y hooks de un mismo escenario. El problema con TypeScript: si no lo tipas bien, `this.page` da error de compilación.
+
+La solución es declarar el tipo del World y exportarlo para que los steps lo consuman:
+
+```typescript
+// steps/world.ts
+import { setWorldConstructor, World, IWorldOptions } from '@cucumber/cucumber';
+import { Browser, BrowserContext, Page, APIRequestContext } from '@playwright/test';
+
+export interface ICustomWorld extends World {
+  browser:    Browser;
+  context:    BrowserContext;
+  page:       Page;
+  apiRequest: APIRequestContext;
+  testData:   Record<string, unknown>;  // bolsillo para datos entre steps
+}
+
+class CustomWorld extends World implements ICustomWorld {
+  browser!:    Browser;
+  context!:    BrowserContext;
+  page!:       Page;
+  apiRequest!: APIRequestContext;
+  testData:    Record<string, unknown> = {};
+
+  constructor(options: IWorldOptions) {
+    super(options);
+  }
+}
+
+setWorldConstructor(CustomWorld);
+```
+
+Ahora en cada step file importas la interfaz y tipas `this`:
+
+```typescript
+// steps/login.steps.ts
+import { Given, When, Then, IWorld } from '@cucumber/cucumber';
+import { ICustomWorld } from './world';
+
+Given('el usuario navega a la página de login', async function (this: ICustomWorld) {
+  await this.page.goto('/login');
+});
+```
+
+## 4. Hooks — El ciclo de vida completo
+
+Los hooks de Cucumber gestionan el ciclo de vida de cada escenario. La regla de oro: **todo lo que levanta Playwright va aquí, nunca en los steps**.
 
 ```typescript
 // steps/hooks.ts
-import { Before, After, BeforeAll, AfterAll, setWorldConstructor } from '@cucumber/cucumber';
-import { chromium, Browser, BrowserContext, Page } from '@playwright/test';
+import {
+  Before, After,
+  BeforeAll, AfterAll,
+  BeforeStep, AfterStep,
+  Status,
+} from '@cucumber/cucumber';
+import { chromium, Browser, request } from '@playwright/test';
+import { ICustomWorld } from './world';
 
-// Simple "World" implementation
-class CustomWorld {
-  page!: Page;
-  context!: BrowserContext;
-}
-setWorldConstructor(CustomWorld);
-
+// ─── BeforeAll: una sola vez por toda la ejecución ────────────────────────────
 let browser: Browser;
 
 BeforeAll(async function () {
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: process.env.HEADLESS !== 'false',
+  });
+  console.log('[hooks] Browser iniciado');
 });
 
-Before(async function () {
-  this.context = await browser.newContext();
+// ─── Before: una vez por escenario ───────────────────────────────────────────
+Before(async function (this: ICustomWorld) {
+  this.context = await browser.newContext({
+    baseURL:     process.env.BASE_URL ?? 'http://localhost:3000',
+    locale:      'es-ES',
+    timezoneId:  'Europe/Madrid',
+    recordVideo: { dir: 'test-results/videos' },
+  });
   this.page = await this.context.newPage();
+
+  // Cliente de API disponible en todos los steps vía this.apiRequest
+  this.apiRequest = await request.newContext({
+    baseURL:     process.env.API_URL ?? 'http://localhost:3001',
+    extraHTTPHeaders: {
+      Authorization: `Bearer ${process.env.API_TOKEN ?? ''}`,
+    },
+  });
 });
 
-After(async function () {
+// ─── Before con tag: solo para escenarios @auth ───────────────────────────────
+Before({ tags: '@auth' }, async function (this: ICustomWorld) {
+  // Pre-autentica vía API para no pasar por el flujo de login en cada escenario
+  const res = await this.apiRequest.post('/auth/login', {
+    data: { email: 'admin@test.com', password: 'Admin123!' },
+  });
+  const { token } = await res.json();
+  await this.context.addCookies([
+    { name: 'auth_token', value: token, domain: 'localhost', path: '/' },
+  ]);
+  console.log('[hooks] @auth — token de sesión inyectado');
+});
+
+// ─── BeforeStep: antes de cada step individual ────────────────────────────────
+BeforeStep(async function (this: ICustomWorld) {
+  // Útil para screenshots o logging por step en modo debug
+  // En producción déjalo vacío o elimínalo — añade overhead
+});
+
+// ─── AfterStep: después de cada step ─────────────────────────────────────────
+AfterStep(async function (this: ICustomWorld, { result }) {
+  if (result?.status === Status.FAILED) {
+    const screenshot = await this.page.screenshot({ fullPage: true });
+    this.attach(screenshot, 'image/png'); // aparece en el reporte HTML
+    console.error('[hooks] Step fallido — screenshot adjunto al reporte');
+  }
+});
+
+// ─── After: al cerrar cada escenario ─────────────────────────────────────────
+After(async function (this: ICustomWorld, { result }) {
+  if (result?.status === Status.FAILED) {
+    // Video ya se guarda solo por recordVideo en el context
+    // Adjuntamos también el HTML de la página para post-mortem
+    const html = await this.page.content();
+    this.attach(html, 'text/html');
+  }
+
+  await this.apiRequest.dispose();
   await this.page.close();
   await this.context.close();
 });
 
+// ─── AfterAll: una sola vez al terminar todo ──────────────────────────────────
 AfterAll(async function () {
   await browser.close();
+  console.log('[hooks] Browser cerrado');
 });
 ```
 
-Este es el patrón correcto (Senior) para integrar BDD: Mantiene las definiciones limpias (Gherkin), el pegamento estructurado (Step Definitions) y tu interacción técnica blindada en el Page Object Model.
+### Hooks con tags — ejecución condicional
+
+Los hooks pueden filtrarse por tags de Gherkin. Solo se ejecutan si el escenario tiene la etiqueta indicada:
+
+```typescript
+// Solo para escenarios marcados con @mobile
+Before({ tags: '@mobile' }, async function (this: ICustomWorld) {
+  await this.context.close();
+  this.context = await browser.newContext({
+    ...devices['iPhone 13'],
+    baseURL: process.env.BASE_URL,
+  });
+  this.page = await this.context.newPage();
+});
+
+// Solo para escenarios @slow — aumenta timeouts
+Before({ tags: '@slow' }, function (this: ICustomWorld) {
+  this.page.setDefaultTimeout(60_000);
+});
+```
+
+## 5. Profiles — `cucumber.js`
+
+Los perfiles son la forma de tener configuraciones distintas para distintos contextos (local, CI, smoke, debug) sin duplicar scripts en `package.json`. Un solo `cucumber.js` lo gestiona todo.
+
+```javascript
+// cucumber.js
+const common = [
+  'features/**/*.feature',
+  '--require-module ts-node/register',
+  '--require steps/**/*.ts',
+  '--format progress-bar',
+  '--format @cucumber/pretty-formatter',
+].join(' ');
+
+module.exports = {
+  // ── default ───────────────────────────────────────────────────────────────
+  // Se usa cuando corres `cucumber-js` sin --profile
+  default: [
+    common,
+    '--format html:test-results/cucumber-report.html',
+    '--format json:test-results/cucumber-report.json',
+  ].join(' '),
+
+  // ── smoke ─────────────────────────────────────────────────────────────────
+  // Solo escenarios críticos: `npm run test:smoke`
+  smoke: [
+    common,
+    '--tags @smoke',
+    '--format html:test-results/smoke-report.html',
+  ].join(' '),
+
+  // ── regression ────────────────────────────────────────────────────────────
+  // Todos los escenarios excepto los marcados @wip
+  regression: [
+    common,
+    '--tags "not @wip"',
+    '--parallel 4',
+    '--format html:test-results/regression-report.html',
+    '--format json:test-results/regression-report.json',
+  ].join(' '),
+
+  // ── ci ────────────────────────────────────────────────────────────────────
+  // Sin colores, sin interactividad, formato JSON para el pipeline
+  ci: [
+    common,
+    '--tags "not @wip"',
+    '--parallel 4',
+    '--format json:test-results/ci-report.json',
+    '--format junit:test-results/junit.xml',
+  ].join(' '),
+
+  // ── debug ─────────────────────────────────────────────────────────────────
+  // Browser visible, un solo worker, verbose
+  debug: [
+    common,
+    '--tags @debug',
+    '--format @cucumber/pretty-formatter',
+  ].join(' '),
+};
+```
+
+Con esto los comandos quedan limpios:
+
+```bash
+npm test                  # todos los escenarios, reporte HTML
+npm run test:smoke        # solo @smoke
+npx cucumber-js --profile regression   # paralelo, sin @wip
+npx cucumber-js --profile ci           # para GitHub Actions / Jenkins
+npx cucumber-js --profile debug        # un escenario, browser visible
+```
+
+### Variables de entorno por perfil
+
+Combina los perfiles con `dotenv` para manejar entornos:
+
+```javascript
+// cucumber.js
+require('dotenv').config({
+  path: `.env.${process.env.TEST_ENV ?? 'local'}`,
+});
+```
+
+```bash
+TEST_ENV=staging npm test          # carga .env.staging
+TEST_ENV=production npm test:smoke # carga .env.production
+```
+
+## 6. Tags — Organizar y filtrar escenarios
+
+Los tags en Gherkin son la forma de agrupar escenarios por tipo, entorno, prioridad o estado. Se definen con `@` y se pueden aplicar a nivel de `Feature`, `Scenario` o `Scenario Outline`.
+
+```gherkin
+@smoke @auth
+Feature: Autenticación de Usuarios
+
+  @critical
+  Scenario: Login de administrador
+    Given ...
+
+  @wip
+  Scenario: Login con SSO (en desarrollo)
+    Given ...
+
+  @mobile @regression
+  Scenario Outline: Login en dispositivos móviles
+    Given ...
+    Examples:
+      | dispositivo |
+      | iPhone 13   |
+      | Pixel 5     |
+```
+
+Filtrar por tags en la línea de comandos:
+
+```bash
+# Solo @smoke
+npx cucumber-js --tags @smoke
+
+# @smoke Y @auth (ambos obligatorios)
+npx cucumber-js --tags "@smoke and @auth"
+
+# @smoke O @critical
+npx cucumber-js --tags "@smoke or @critical"
+
+# Todo excepto @wip
+npx cucumber-js --tags "not @wip"
+
+# @regression pero no @mobile
+npx cucumber-js --tags "@regression and not @mobile"
+```
+
+## 7. Debugging de requests API con `console.log`
+
+Cuando un step hace llamadas HTTP (ya sea con `this.apiRequest` o con `fetch` dentro de `page.evaluate`), es crítico poder ver exactamente qué se envía y qué se recibe. El patrón es envolver las llamadas en un helper que loguea request y response:
+
+### Helper de API con logging
+
+```typescript
+// support/api.client.ts
+import { APIRequestContext } from '@playwright/test';
+
+interface RequestLog {
+  method: string;
+  url: string;
+  body?: unknown;
+}
+
+export async function apiPost(
+  request: APIRequestContext,
+  url: string,
+  body: unknown,
+): Promise<unknown> {
+  const log: RequestLog = { method: 'POST', url, body };
+  console.log('[API →]', JSON.stringify(log, null, 2));
+
+  const response = await request.post(url, { data: body });
+  const responseBody = await response.json().catch(() => null);
+
+  console.log('[API ←]', JSON.stringify({
+    status: response.status(),
+    ok:     response.ok(),
+    body:   responseBody,
+  }, null, 2));
+
+  if (!response.ok()) {
+    throw new Error(`API ${log.method} ${url} falló con ${response.status()}`);
+  }
+
+  return responseBody;
+}
+
+export async function apiGet(
+  request: APIRequestContext,
+  url: string,
+): Promise<unknown> {
+  console.log('[API →] GET', url);
+
+  const response = await request.get(url);
+  const responseBody = await response.json().catch(() => null);
+
+  console.log('[API ←]', JSON.stringify({
+    status: response.status(),
+    body:   responseBody,
+  }, null, 2));
+
+  return responseBody;
+}
+```
+
+### Uso en los steps
+
+```typescript
+// steps/orders.steps.ts
+import { When, Then } from '@cucumber/cucumber';
+import { expect } from '@playwright/test';
+import { ICustomWorld } from './world';
+import { apiPost, apiGet } from '@support/api.client';
+
+When('crea un pedido con {int} unidades de {string}',
+  async function (this: ICustomWorld, quantity: number, product: string) {
+    const payload = { product, quantity, userId: this.testData['userId'] };
+
+    // Consola mostrará la request y la response completas
+    const order = await apiPost(this.apiRequest, '/api/orders', payload);
+    this.testData['orderId'] = (order as any).id;
+  }
+);
+
+Then('el pedido aparece en el historial del usuario', async function (this: ICustomWorld) {
+  const orders = await apiGet(
+    this.apiRequest,
+    `/api/users/${this.testData['userId']}/orders`,
+  );
+  const list = orders as any[];
+  expect(list.some(o => o.id === this.testData['orderId'])).toBe(true);
+});
+```
+
+Output en consola durante la ejecución:
+
+```
+[API →] {
+  "method": "POST",
+  "url": "/api/orders",
+  "body": { "product": "Zapatillas Pro", "quantity": 2, "userId": "usr_42" }
+}
+[API ←] {
+  "status": 201,
+  "ok": true,
+  "body": { "id": "ord_99", "status": "pending", "total": 129.90 }
+}
+```
+
+### Logging de requests de red del browser
+
+Si necesitas ver las requests que lanza el browser (no las de tu código Node), úsalo en los hooks:
+
+```typescript
+// steps/hooks.ts — dentro del Before
+Before(async function (this: ICustomWorld) {
+  this.context = await browser.newContext({ ... });
+  this.page    = await this.context.newPage();
+
+  // Log de cada request que sale del browser
+  this.page.on('request', req => {
+    if (req.url().includes('/api/')) {
+      console.log('[browser →]', req.method(), req.url());
+      const body = req.postData();
+      if (body) console.log('[browser → body]', body);
+    }
+  });
+
+  // Log de cada response que recibe el browser
+  this.page.on('response', res => {
+    if (res.url().includes('/api/')) {
+      console.log('[browser ←]', res.status(), res.url());
+    }
+  });
+});
+```
+
+## 8. Cómo ejecutar los tests
+
+### Con `npm`
+
+```bash
+# Todos los escenarios (perfil default)
+npm test
+
+# Perfil específico
+npm run test:smoke
+npm run test:ci
+
+# Pasando variables de entorno
+TEST_ENV=staging npm test
+HEADLESS=false npm test        # browser visible
+```
+
+### Con `npx cucumber-js` directamente
+
+```bash
+# Un feature específico
+npx cucumber-js features/login.feature
+
+# Un escenario por nombre (regex)
+npx cucumber-js --name "administrador inicia sesión"
+
+# Con tag y perfil
+npx cucumber-js --profile regression --tags "@smoke and not @wip"
+
+# Paralelo manual
+npx cucumber-js --parallel 4
+
+# Verbose — muestra cada step
+npx cucumber-js --format @cucumber/pretty-formatter
+```
+
+### ¿Playwright Test runner o Cucumber runner?
+
+Esta es la pregunta que más confunde al integrar ambas herramientas. La respuesta corta:
+
+| Situación | Usa |
+|---|---|
+| Tests técnicos, componentes, integración | Playwright Test (`npx playwright test`) |
+| Escenarios BDD con stakeholders no técnicos | Cucumber (`npx cucumber-js`) |
+| Ambos en el mismo proyecto | Scripts separados en `package.json` |
+
+**No los mezcles en la misma ejecución.** Playwright Test y Cucumber son runners independientes. Playwright puede estar presente como librería (para `chromium`, `Page`, etc.) sin que uses su runner. El `cucumber-js` es el que orquesta los escenarios Gherkin.
+
+```json
+{
+  "scripts": {
+    "test:unit":       "npx playwright test tests/unit/",
+    "test:integration":"npx playwright test tests/integration/",
+    "test:bdd":        "cucumber-js",
+    "test:bdd:smoke":  "cucumber-js --profile smoke",
+    "test:all":        "npm run test:unit && npm run test:bdd"
+  }
+}
+```
+
+## 9. Buenas prácticas — Cucumber + Playwright + Node
+
+**El mundo está en el World, los clics están en el POM, el negocio está en el Gherkin.**
+
+Cada capa tiene una responsabilidad fija. Cuando un step se vuelve largo, es señal de que algo del POM está filtrándose hacia arriba.
+
+### Lo que va en cada capa
+
+| Capa | Contiene | No contiene |
+|---|---|---|
+| `.feature` | comportamiento de negocio en lenguaje natural | selectores, URLs, datos técnicos |
+| `steps/*.ts` | traducción Gherkin → POM | lógica de UI, waits, clics directos |
+| `pages/*.ts` | acciones de UI, locators, waits | assertions de negocio |
+| `hooks.ts` | setup/teardown de Playwright | lógica de test |
+| `world.ts` | estado compartido entre steps | lógica de negocio |
+
+### Steps reutilizables
+
+Un step bien escrito se puede reutilizar en múltiples features sin modificarlo:
+
+```typescript
+// ✅ Genérico y reutilizable
+Given('el usuario {string} ha iniciado sesión', async function (role: string) { ... });
+When('navega a la sección {string}', async function (section: string) { ... });
+Then('ve el mensaje {string}', async function (message: string) { ... });
+
+// ❌ Acoplado a un feature específico
+Given('el administrador ha iniciado sesión y está en el panel de control', ...);
+```
+
+### Un contexto de browser por escenario
+
+Nunca compartas `page` ni `context` entre escenarios. El `Before`/`After` en `hooks.ts` garantiza que cada escenario empiece limpio — sin cookies, sin storage, sin estado de sesión residual.
+
+### Datos de test en `testData`, no en variables globales
+
+```typescript
+// ✅ Estado en el World — aislado por escenario
+this.testData['orderId'] = createdOrder.id;
+
+// ❌ Variable módulo — se filtra entre escenarios en ejecución paralela
+let orderId: string;
+```
+
+### Tags como documentación, no solo como filtros
+
+Los tags bien elegidos documentan la suite:
+
+```gherkin
+@smoke          → escenario crítico, debe pasar siempre
+@regression     → suite completa
+@wip            → en desarrollo, excluido de CI
+@slow           → tarda más de 30s, excluido de feedback rápido
+@mobile         → requiere emulación de dispositivo
+@api            → valida contrato de API, no UI
+@destructivo    → modifica datos reales, solo en entorno aislado
+```
+
+### Nunca `page.waitForTimeout()` en los steps
+
+Si un step necesita un `waitForTimeout` fijo, es una señal de que el POM no está esperando el estado correcto. Usa `waitForSelector`, `waitForURL` o `waitForResponse` en el POM.
+
+```typescript
+// ❌ Anti-patrón — frágil y lento
+await this.page.waitForTimeout(2000);
+
+// ✅ Espera el estado real
+await this.page.waitForURL(/.*dashboard/);
+await this.page.waitForSelector('[data-testid="dashboard-loaded"]');
+```
 
 ---
 

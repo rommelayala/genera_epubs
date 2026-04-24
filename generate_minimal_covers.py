@@ -1,3 +1,5 @@
+# DEPRECADO: este script ha sido reemplazado por epub_generator/cover.py
+# No usar. Se mantiene solo como referencia histórica.
 from PIL import Image, ImageDraw, ImageFont
 import os
 

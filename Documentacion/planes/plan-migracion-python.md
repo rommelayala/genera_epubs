@@ -4,7 +4,7 @@
 
 ## Objetivo
 
-Reemplazar `generate_epub.sh` como motor de generación por un CLI en Python extensible,
+Añadir ademas de `generate_epub.sh` como motor de generación por un CLI en Python extensible,
 manteniendo la invocación por comandos y añadiendo:
 - Metadata enriquecida por libro via archivo YAML sidecar
 - Portadas configurables desde el mismo YAML
@@ -58,9 +58,44 @@ genera_epubs/
   - `pandoc` (para `.md`)
   - `ebook-convert` de Calibre (para `.pdf`) — opcional, solo falla si hay `.pdf` en el batch
 - Si falta una dependencia, imprime el comando exacto para instalarla y sale.
+- Descarga fuentes Inter si no existen en `fonts/`.
 - Crea venv Python si no existe y ejecuta `pip install -r requirements.txt`.
 - Pasa todos los argumentos sin modificar a `generate_epub.py`.
 - **Sin lógica de negocio.**
+
+**Orden de ejecución del launcher:**
+```
+1. check pandoc
+2. check ebook-convert  (solo si hay .pdf en el batch)
+3. check_fonts          → descarga Inter si fonts/ no existe
+4. check venv + pip install
+5. python generate_epub.py [args]
+```
+
+**Lógica de `check_fonts`:**
+- Verifica si existen `fonts/Inter-Regular.ttf` y `fonts/Inter-Bold.ttf`.
+- Si faltan, descarga `Inter-4.0.zip` desde el release oficial de GitHub con `curl`.
+- Extrae los TTF con `find` (robusto ante cambios de estructura interna del zip).
+- Idempotente: no descarga si las fuentes ya están.
+- Falla con mensaje claro si `curl` no está disponible.
+
+```bash
+check_fonts() {
+  if [ ! -f "$FONTS_DIR/Inter-Regular.ttf" ] || [ ! -f "$FONTS_DIR/Inter-Bold.ttf" ]; then
+    echo "🔧 Descargando fuentes Inter..."
+    mkdir -p "$FONTS_DIR"
+    local TMP
+    TMP=$(mktemp -d)
+    curl -fsSL "https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip" \
+      -o "$TMP/inter.zip" || { echo "❌ No se pudo descargar Inter. Instala curl."; exit 1; }
+    unzip -q "$TMP/inter.zip" -d "$TMP"
+    cp "$(find "$TMP" -name "Inter-Regular.ttf" | head -1)" "$FONTS_DIR/"
+    cp "$(find "$TMP" -name "Inter-Bold.ttf" | head -1)" "$FONTS_DIR/"
+    rm -rf "$TMP"
+    echo "✅ Fuentes instaladas en fonts/"
+  fi
+}
+```
 
 **Ejemplo de error cuando falta pandoc (Linux):**
 ```
@@ -80,6 +115,8 @@ genera_epubs/
 **Ejemplo de primer arranque (venv se crea solo, sin sudo):**
 ```
 🔧 Creando venv en .venv/...
+🔧 Descargando fuentes Inter...
+✅ Fuentes instaladas en fonts/
 🔧 Instalando dependencias Python (Pillow, PyYAML)...
 🚀 Ejecutando generate_epub.py...
 ```
@@ -304,16 +341,17 @@ libros_draft/
 ## Fases de implementación
 
 ### Fase 1 — Base funcional (esta iteración)
-- [ ] `requirements.txt` (Pillow + PyYAML)
-- [ ] `generate_epub.sh` actualizado (launcher + check pandoc + check calibre + venv)
-- [ ] `epub_generator/config.py` — lectura de YAML sidecar con defaults
-- [ ] `epub_generator/cover.py` — portada desde YAML `cover:`
-- [ ] `epub_generator/generator.py` — dispatcher por extensión
-- [ ] `epub_generator/converters/markdown.py` — pandoc wrapper
-- [ ] `epub_generator/converters/pdf.py` — ebook-convert wrapper
-- [ ] `generate_epub.py` — CLI + paralelismo + descubrimiento `.md`/`.pdf`
-- [ ] Deprecar `generate_minimal_covers.py`
-- [ ] `.gitignore` actualizado
+- [X] `requirements.txt` (Pillow + PyYAML)
+- [X] `fonts/Inter-Regular.ttf` + `fonts/Inter-Bold.ttf` (auto-descargados por el launcher)
+- [X] `generate_epub.sh` actualizado (launcher + check pandoc + check calibre + check_fonts + venv)
+- [X] `epub_generator/config.py` — lectura de YAML sidecar con defaults
+- [X] `epub_generator/cover.py` — portada desde YAML `cover:`
+- [X] `epub_generator/generator.py` — dispatcher por extensión
+- [X] `epub_generator/converters/markdown.py` — pandoc wrapper
+- [X] `epub_generator/converters/pdf.py` — ebook-convert wrapper
+- [X] `generate_epub.py` — CLI + paralelismo + descubrimiento `.md`/`.pdf`
+- [X] Deprecar `generate_minimal_covers.py`
+- [X] `.gitignore` actualizado
 
 ### Fase 2 — Mejoras incrementales (próximas iteraciones)
 - [ ] CSS personalizado por libro (inyectable via pandoc `--css`)

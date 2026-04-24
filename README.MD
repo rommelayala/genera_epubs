@@ -1,90 +1,216 @@
-# Generador de EPUBs desde Markdown
+# Generador de EPUBs y Audiolibros
 
-Este directorio contiene un script en Bash (`generate_epub.sh`) configurado para transformar cualquier archivo Markdown (`.md`) en un e-book (EPUB) con formato profesional, utilizando **Pandoc** como motor principal debido a su inmenso poder de conversión y personalización.
+Convierte archivos Markdown (`.md`) y PDF (`.pdf`) a **EPUB** con portadas automáticas,
+metadata configurable por libro vía YAML, procesamiento en paralelo y generación de **audiolibros M4B**
+con chapter markers navegables, portada embebida e intro/outro narrados.
 
----
-
-## 🛠 Precondiciones
-
-Para asegurar el correcto funcionamiento del script generador de EPUB, tu entorno macOS debe cumplir con lo siguiente:
-
-1. **Tener instalado Pandoc**:
-   Pandoc es la herramienta base que realiza la conversión por debajo. Si no lo tienes, abre tu terminal y ejecuta:
-   ```bash
-   brew install pandoc
-   ```
-2. **Permisos de Ejecución**:
-   El script necesita permisos para ejecutarse en tu máquina local. Si la terminal te marca un error de permisos, córrelo por primera y única vez con:
-   ```bash
-   chmod +x ./generate_epub.sh
-   ```
-3. **Un archivo Markdown válido**:
-   Debes contar con el documento Markdown (`.md`) finalizado. Es altamente recomendable que este posea su estructura limpia de cabeceras (`#`, `##`) dado que Pandoc los usará para trazar el **Índice Interactivo (ToC)** de tu libro.
+**Versión:** 2.0 | **Última actualización:** 2026-04-24
 
 ---
 
-## 🚀 Uso (Acción)
+## Índice de Documentación
 
-Invocar al script es tan simple como pasarle dos argumentos: la **ruta del archivo Markdown** a evaluar y el **nombre preferido** (sin extensión) que quieres para el output. 
+- **[README.MD](README.MD)** (este archivo) — Uso rápido y guía de inicio
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — Diseño del sistema, decisiones técnicas, flujos de datos
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — Estructura del código, cómo modificar, cambios comunes
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — Problemas comunes, FAQs, debugging
 
-**Estructura del comando:**
-```bash
-./generate_epub.sh <ruta_al_archivo.md> <nombre_deseado_del_libro>
-```
+---
 
-**Ejemplo de uso:**
-Asumiendo la siguiente estructura de carpetas (la cual es la actual del proyecto) y estando tú posicionado sobre la carpeta `geneara_epubs`:
+## Precondiciones
 
-```text
-geneara_epubs/
-├── context
-│   ├── CONTEXT.md -> retoma el trabajo con cualquier AI assitant   
-│
-├── Documentation -> Documentacion del proyecto
-│   ├── planes 
-│   │     ├── planes propuestos
-│   │
-│   ├──tasks.md -> tareas pendientes y hechas
-│
-├── epubs_generados
-│   └── playwright-ts-intermedio-avanzado.epub
-│
-├── libros_draft
-│   └── playwright-ts-intermedio-avanzado.md
-│
-├── generate_epub.sh       ← El corazon y cerebro de la app
-│
-├── README.MD
+| Herramienta | Para qué | Instalar |
+|---|---|---|
+| **Python 3** | motor principal | preinstalado en macOS/Linux |
+| **Pandoc** | convertir `.md` → EPUB | `brew install pandoc` / `sudo apt install pandoc` |
+| **Calibre** (`ebook-convert`) | convertir `.pdf` → EPUB (solo si hay PDFs) | `brew install --cask calibre` / `sudo apt install calibre` |
+
+El launcher crea el venv y descarga las fuentes Inter automáticamente en el primer arranque.
+
+---
+
+## Estructura del proyecto
 
 ```
+genera_epubs/
+├── generate_epub.sh          ← entrada: verifica deps, crea venv, lanza Python
+├── generate_epub.py          ← orquestador CLI + paralelismo
+├── requirements.txt          ← Pillow, PyYAML
+├── epub_generator/
+│   ├── config.py             ← lee {basename}.yaml → BookConfig
+│   ├── cover.py              ← genera portada con Pillow
+│   ├── generator.py          ← dispatcher por extensión
+│   └── converters/
+│       ├── markdown.py       ← pandoc wrapper
+│       └── pdf.py            ← ebook-convert wrapper
+├── fonts/                    ← Inter Regular + Bold (auto-descargadas)
+├── libros_draft/             ← fuentes: .md y/o .pdf + .yaml por libro
+├── portadas_draft/           ← portadas generadas o manuales
+└── epubs_generados/          ← EPUBs de salida (sin timestamp, git controla versiones)
+```
 
-Ejecutarías:
+---
+
+## Uso
+
 ```bash
--> Todos los libros
+# Todos los libros en libros_draft/ (paralelo)
 ./generate_epub.sh
 
--> Libro especifico
-./generate_epub.sh [playwright-ts-intermedio-avanzado.md] [manual_avanzado_qa]
+# Libro específico (con o sin extensión, con o sin path)
+./generate_epub.sh agentes-ia-libro
+./generate_epub.sh agentes-ia-libro.md
+./generate_epub.sh libros_draft/agentes-ia-libro.md
+
+# Libro específico con portada manual
+./generate_epub.sh agentes-ia-libro.md mi_portada.jpg
 ```
 
 ---
 
-## 📦 Salida (Output)
+## Configuración por libro (YAML sidecar)
 
-Una vez ejecutado el comando con éxito, el script realizará en automático las siguientes acciones en el sistema de archivos: 
+Cada libro puede tener un archivo `libros_draft/{basename}.yaml` con su metadata y
+configuración de portada. Si no existe, se usan los defaults globales.
 
-1. **Creación del directorio**: Verificará la existencia del directorio base `/epubs_generados` en la ruta donde estés corriendo el script. Si de casualidad no existe, lo creará por ti automáticamente.
-2. **Añadido de Timestamp Fijo**: Construirá un nombre de archivo uniendo tu `<nombre_deseado_del_libro>` con un timestamp de generación único (`YYYYMMDD_HHMMSS`). Esto evitará conflictos de sobrescritura de e-books si compilas varias veces el mismo libro el mismo día.
-3. **Generación del Archivo Final**: Insertará el EPUB procesado y navegable (que incluye Metadata como el Título y el Autor nativos) directamente en esa ruta. 
-
-**Salida en consola:**
-```text
-🔄 Convirtiendo: agentes-ia-libro.md...
-✅ Generado: ./epubs_generados/agentes-ia-libro_20260410_212651.epub
+```yaml
+# libros_draft/mi-libro.yaml
+title: "Título del Libro"
+author: "Rommel Ayala - QA Lead"
+description: "Descripción opcional"
+language: "es-ES"
+date: "2026"
+cover:
+  title: "Título del Libro"   # texto principal de la portada
+  subtitle: "Subtítulo"       # línea secundaria (opcional)
+  bg_color: "#151515"
+  text_color: "#EAEAEA"
+  accent_color: "#4A4A4A"
+  title_size: 42
+  subtitle_size: 24
+  footer: "© Rommel Ayala - All rights reserved"
+  image: "portada-manual.jpg" # opcional: portada pre-existente en portadas_draft/
 ```
 
-> **Portadas Especificadas**: El script crea y utiliza una carpeta `portadas_draft/`. Para añadir una portada a tu libro, coloca una imagen (`.jpg` o `.png`) en esa carpeta y pasa su nombre como **segundo argumento** al ejecutar el script. 
-> Ejemplo: `./generate_epub.sh mi_libro.md mi_portada.jpg`
-> Si no pasas un segundo argumento, el script la omitirá y utilizará la portada por defecto de Pandoc.
-> 
-> **Personalización Extra**: Dentro de las llamadas internas de Pandoc en el script fuente `generate_epub.sh`, existe un parámetro comentado que te permitirá añadir rápidamente reglas de estilos inyectables **(`--css`)**.
+**Campos mínimos recomendados:**
+
+```yaml
+title: "Título del Libro"
+cover:
+  title: "Título del Libro"
+  subtitle: "Subtítulo opcional"
+```
+
+---
+
+## Audiolibros
+
+El sistema genera audiolibros M4B con narración TTS (edge-tts), chapter markers navegables,
+portada embebida, intro/outro automático y caché por capítulo.
+
+### Precondiciones adicionales para audio
+
+| Herramienta | Para qué | Instalar |
+|---|---|---|
+| **ffmpeg** + **ffprobe** | ensamblar M4B, chapter markers, portada | `brew install ffmpeg` / `sudo apt install ffmpeg` |
+
+### Uso
+
+```bash
+# Todos los libros como audiolibro
+./generate_epub.sh --format audio
+
+# Libro específico
+./generate_epub.sh --format audio agentes-ia-libro
+
+# Forzar re-narración (ignorar caché)
+./generate_epub.sh --format audio --no-cache agentes-ia-libro
+```
+
+### Configuración de audio (YAML sidecar)
+
+```yaml
+# libros_draft/mi-libro.yaml
+audio:
+  voice: ""              # vacío = auto por idioma (es-ES-AlvaroNeural)
+  rate: "-5%"            # velocidad: ligeramente lento para mejor comprensión
+  volume: "+0%"          # volumen: neutro
+  pitch: "+0Hz"          # tono: neutro
+  bitrate: "96k"         # calidad AAC: 96k es estándar para voz hablada
+  chapter_pause: 1.5     # segundos de silencio entre capítulos
+  concurrency: 5         # capítulos narrados en paralelo (semáforo)
+  intro: true            # narrar intro automático ("Este es el audiolibro...")
+  outro: true            # narrar outro automático ("Fin del audiolibro...")
+```
+
+**Voces disponibles por idioma:**
+
+| Idioma | Voz default |
+|---|---|
+| es-ES | es-ES-AlvaroNeural |
+| es-MX | es-MX-JorgeNeural |
+| en-US | en-US-GuyNeural |
+| en-GB | en-GB-RyanNeural |
+
+### Caché
+
+Los capítulos narrados se cachean por hash SHA-256 del texto limpio. Al re-generar un
+audiolibro, solo se re-narran los capítulos que cambiaron. El manifiesto se guarda en
+`audios_generados/{libro}_chapters/cache_manifest.json`. Usa `--no-cache` para forzar
+re-narración completa.
+
+### Salida
+
+```
+audios_generados/
+├── mi-libro.m4b                    ← audiolibro con chapters + portada
+└── mi-libro_chapters/
+    ├── 00_intro.mp3                ← intro narrado
+    ├── 01_capitulo-uno.mp3
+    ├── 02_capitulo-dos.mp3
+    ├── 99_outro.mp3                ← outro narrado
+    └── cache_manifest.json         ← caché de hashes
+```
+
+---
+
+## Precedencia de portadas
+
+El sistema resuelve la portada en este orden (gana el primero que exista):
+
+1. Segundo argumento CLI → `./generate_epub.sh libro.md mi.jpg`
+2. Campo `cover.image` en el YAML → `portadas_draft/mi.jpg`
+3. Auto-discovery → `portadas_draft/{basename}.jpg` / `.jpeg` / `.png`
+4. Generada con Pillow desde los valores `cover:` del YAML
+
+---
+
+## Output de consola
+
+```
+🔧 Instalando dependencias Python...
+🚀 Ejecutando generate_epub.py...
+📚 Descubiertos 3 libros: 2 markdown, 1 PDF.
+🚀 Procesando en paralelo...
+
+[claude-uso-maestro]    🖼️  Portada: claude-uso-maestro.jpg
+[claude-uso-maestro]    🔄 Convirtiendo (.md)...
+[claude-uso-maestro]    ✅ epubs_generados/claude-uso-maestro.epub
+[agentes-ia-libro]      🖼️  Portada: agentes-ia-libro.jpg
+[agentes-ia-libro]      🔄 Convirtiendo (.md)...
+[agentes-ia-libro]      ✅ epubs_generados/agentes-ia-libro.epub
+[manual-legado]         🖼️  Portada: manual-legado.jpg
+[manual-legado]         🔄 Convirtiendo (.pdf)...
+[manual-legado]         ✅ epubs_generados/manual-legado.epub
+
+✨ 3/3 libros generados
+```
+
+---
+
+## Notas
+
+- Los EPUBs se generan **sin timestamp**. Git controla las versiones.
+- Los PDFs deben tener capa de texto. PDFs escaneados (solo imágenes) no están soportados.
+- Si dos archivos comparten el mismo nombre base con distinta extensión
+  (`libro.md` y `libro.pdf`), el último en terminar pisa al otro en disco. Evitar.

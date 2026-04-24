@@ -65,6 +65,18 @@ No es una guerra de marcas. Es entender las fortalezas:
 
 **Para un perfil QA:** Claude es superior en razonamiento sobre comportamiento esperado vs real, generación de casos edge, y seguir especificaciones precisas sin inventar.
 
+### La familia Claude — tres niveles de potencia y coste
+
+Dentro de Claude hay tres modelos con perfiles radicalmente distintos. Elegir el correcto es la primera decisión del operador maestro:
+
+| Modelo | ID | Velocidad | Coste | Cuándo usarlo |
+|---|---|---|---|---|
+| **Haiku 4.5** | `claude-haiku-4-5` | ⚡⚡⚡ | $ | Validaciones, hooks, pre-commit, clasificaciones, datos de prueba mecánicos, bucles autónomos (Ralph) |
+| **Sonnet 4.6** | `claude-sonnet-4-6` | ⚡⚡ | $$ | Generación de código, revisión de PRs, test suites, trabajo diario de desarrollo — el caballo de batalla |
+| **Opus 4.6** | `claude-opus-4-6` | ⚡ | $$$$ | Arquitectura, debugging de bugs complejos, razonamiento de múltiples pasos, decisiones de diseño críticas |
+
+> **Regla de oro:** empieza con Sonnet. Baja a Haiku si la tarea es mecánica o repetitiva. Sube a Opus solo si Sonnet no da el nivel de razonamiento que necesitas.
+
 ---
 
 ## WHO — El usuario promedio vs el operador maestro
@@ -150,6 +162,8 @@ El entorno donde Claude pasa de ser un chatbot a ser un colaborador de ingenier�
 
 ### API directa
 Para cuando construyes tus propias herramientas. Máximo control, máxima responsabilidad. Si llegas a este nivel, ya eres operador maestro.
+
+> **⚡ Modelo óptimo:** `sonnet` como default de producción. Usa `haiku` en pipelines de procesamiento masivo (clasificación, extracción de datos, anotación a escala) donde el coste se multiplica por miles de llamadas. Reserva `opus` para las llamadas donde el razonamiento es el producto principal.
 
 ---
 
@@ -347,57 +361,207 @@ Piensa en la ventana de contexto como RAM. Tienes 200K tokens (Claude 3.5+). Cua
 
 ---
 
-## Compactación de conversaciones — el skill crítico
+## Gestión del ciclo de vida del contexto
 
-### ¿Qué es la compactación?
+El contexto es el recurso más escaso en Claude Code. Saber cuándo compactarlo, cómo recuperarlo y cuándo borrarlo es la diferencia entre una sesión fluida y una que se degrada sola.
 
-Cuando una conversación crece, el contexto se llena de historial que ya no aporta. La compactación es resumir ese historial para liberar tokens sin perder el estado de trabajo.
+```
+Ciclo de vida de una sesión:
 
-Claude Code hace esto automáticamente cuando se acerca al límite. Pero el operador maestro lo hace manualmente y estratégicamente.
+  Nueva sesión                    Contexto lleno
+       │                               │
+       ▼                               ▼
+  [trabajo]  →  /compact  →  [continúa limpio]
+       │
+       └──  /resume <id>  →  [recuperas desde otro día]
+       │
+       └──  /clear        →  [reset total, contexto vacío]
+```
 
-### Cuándo compactar manualmente
+---
 
-**Compacta cuando:**
+### `/compact` — Compactar sin perder estado
+
+`/compact` resume el historial de la conversación en un bloque estructurado, libera tokens y continúa en la misma sesión. Claude no pierde el hilo — solo elimina el relleno.
+
+**Uso básico:**
+```
+/compact
+```
+Claude genera un resumen interno del historial y continúa. Tú no ves el resumen — solo notas que la sesión sigue pero más liviana.
+
+**Con instrucción personalizada:**
+```
+/compact Enfócate en las decisiones de arquitectura tomadas y los bugs pendientes.
+         Ignora el debugging ya resuelto.
+```
+Puedes guiar qué preservar en el resumen. Útil cuando el historial mezcla contexto relevante e irrelevante.
+
+**Cuándo compactar:**
 - Terminaste una subtarea y vas a empezar otra relacionada
-- El historial tiene mucho debugging ya resuelto que no necesitas recordar
-- Sientes que Claude "olvidó" decisiones de hace 20 mensajes (contexto saturado)
-- Cambiaste de tema significativamente dentro de la misma sesión
+- El historial tiene mucho debugging ya resuelto que pesa pero no aporta
+- `/cost` muestra un consumo alto y queda trabajo por delante
+- Sientes que Claude empieza a "olvidar" decisiones anteriores (síntoma de saturación)
 
-**NO compactes cuando:**
-- Estás en medio de un problema complejo con contexto entrelazado
-- El historial contiene decisiones de diseño que Claude necesita para ser consistente
-- Vas a continuar exactamente la misma tarea
+**Cuándo NO compactar:**
+- Estás en medio de un razonamiento complejo — el historial es el contexto
+- El historial contiene código en construcción que Claude necesita para ser consistente
+- Vas a continuar exactamente la misma tarea sin pausa
 
-### Cómo compactar bien (manual)
+**Compactación manual — el prompt de resumen:**
+
+Si quieres control total sobre qué se preserva, pide el resumen tú mismo antes de compactar:
 
 ```
-Antes de continuar, necesito compactar el contexto.
-Resume en formato estructurado:
+Resume el estado actual en este formato antes de que compactemos:
 
-1. DECISIONES TOMADAS: (las que afectan trabajo futuro)
-2. ESTADO ACTUAL: (qué está hecho, qué falta)
-3. PROBLEMAS CONOCIDOS: (bugs identificados, deuda técnica)
-4. CONTEXTO CRÍTICO: (restricciones, patrones elegidos)
+1. DECISIONES TOMADAS: (solo las que afectan trabajo futuro)
+2. ESTADO: (qué está hecho / qué falta)
+3. PROBLEMAS PENDIENTES: (bugs conocidos, deuda técnica)
+4. RESTRICCIONES ACTIVAS: (patrones elegidos, convenciones acordadas)
 
-Sé conciso — este resumen reemplazará el historial anterior.
+Sé conciso — este resumen será el nuevo contexto de partida.
 ```
 
-Después de obtener el resumen, puedes iniciar una nueva conversación pegando solo ese resumen como contexto inicial.
+Copia la respuesta, inicia una nueva sesión, pega el resumen como primer mensaje. Tienes un contexto limpio con toda la información relevante.
 
-### Cuándo empezar una nueva conversación en lugar de compactar
+**Compactación automática:**
 
-**Nueva conversación cuando:**
-- La tarea es completamente independiente
+Claude Code compacta solo cuando el contexto se acerca al límite de la ventana. Cuando ocurre verás un mensaje de sistema. Puedes desactivarlo si prefieres control manual — pero en sesiones largas es mejor dejarlo activo y compactar manualmente antes de que lo haga solo.
+
+---
+
+### `/resume` — Recuperar una sesión anterior
+
+Las sesiones de Claude Code persisten en disco. Cada sesión tiene un ID único. `/resume` te devuelve exactamente donde lo dejaste — contexto, historial, modelo — sin tener que recargar nada a mano.
+
+**Listar sesiones disponibles:**
+```
+/resume
+```
+Sin argumento, muestra una lista de sesiones recientes con ID, fecha, directorio y los primeros tokens del primer mensaje. Seleccionas con las flechas.
+
+**Reanudar una sesión específica por ID:**
+```
+/resume abc123def456
+```
+
+**Ver el ID de la sesión actual (para guardarlo):**
+```
+/status
+```
+Muestra el `session_id` junto al modelo, tokens usados y directorio. Guarda ese ID si quieres poder retomar esta sesión desde un script o desde otro día.
+
+**Desde modo headless (scripts y CI):**
+```bash
+# Retomar una sesión específica desde un script
+claude -p "continúa donde lo dejamos" --resume abc123def456
+
+# Retomar la sesión más reciente del directorio actual
+SESSION=$(claude --list-sessions | head -1 | awk '{print $1}')
+claude -p "¿en qué estado quedó el trabajo?" --resume "$SESSION"
+```
+
+**Dónde se guardan las sesiones:**
+```
+~/.claude/projects/[hash-del-repo]/sessions/
+```
+Cada sesión es un archivo JSON con el historial completo. Persisten hasta que los borras manualmente o ejecutas `/clear`.
+
+**Cuándo usar `/resume`:**
+- Retomar trabajo del día anterior sin recargar contexto a mano
+- Continuar una tarea larga que interrumpiste
+- Revisar qué decidiste en una sesión específica
+
+**Cuándo NO funciona `/resume`:**
+- Si hiciste `/clear` en esa sesión — el historial se borró
+- Si la sesión fue en otro directorio y no recuerdas el hash
+- Sesiones muy antiguas pueden estar truncadas por política de retención local
+
+---
+
+### `/clear` — Borrar el contexto actual
+
+`/clear` elimina el historial de la conversación activa y te deja con un contexto completamente vacío. La sesión sigue abierta (mismo proceso), pero es como empezar de cero.
+
+**Uso:**
+```
+/clear
+```
+
+**Qué borra `/clear`:**
+- Todo el historial de mensajes de la sesión actual
+- El contexto acumulado de herramientas y resultados
+
+**Qué NO borra `/clear`:**
+- `CLAUDE.md` del proyecto — sigue cargándose
+- Tu memoria persistente (`~/.claude/projects/.../memory/`)
+- Skills y hooks configurados
+- El modelo seleccionado
+- Otras sesiones en disco (solo limpia la activa)
+
+```
+Antes de /clear                    Después de /clear
+─────────────────                  ─────────────────
+Historial: 8,000 tokens      →     Historial: 0 tokens
+CLAUDE.md: cargado           →     CLAUDE.md: cargado (persiste)
+Memoria: cargada             →     Memoria: cargada (persiste)
+Modelo: sonnet               →     Modelo: sonnet (persiste)
+Skills: activos              →     Skills: activos (persisten)
+```
+
+**Cuándo usar `/clear`:**
+- Cambias a una tarea completamente diferente y el historial solo estorba
+- La sesión entró en un estado confundido (Claude se contradice, bucles de errores)
 - Quieres "mente fresca" — sin sesgos del historial anterior
-- El contexto anterior podría contaminar la nueva tarea (ej: debuggeaste un enfoque incorrecto y ahora quieres uno nuevo)
-- La sesión anterior terminó con Claude en un estado confundido o inconsistente
+- Terminaste el trabajo del día y quieres empezar la próxima sesión limpio
 
-**Regla práctica:**
+**Anti-patrón:**
 ```
-¿El historial ayuda o estorba para la próxima tarea?
-→ Ayuda: compacta y continúa
-→ Estorba: nueva conversación con contexto limpio
+❌ /clear en medio de un refactor complejo
+   → pierdes todo el contexto del problema
+
+✅ /compact mientras sigues trabajando
+✅ /clear solo cuando el contexto anterior no aporta nada
 ```
+
+---
+
+### La tabla de decisión: compact vs resume vs clear
+
+```
+¿Qué necesitas?                                    → Comando
+
+Sigues con la misma tarea, el historial pesa       → /compact
+Cambias de tarea pero quieres volver luego         → anota el session_id con /status
+Retomas trabajo de ayer o de hace unas horas       → /resume
+La tarea actual termina y empiezas algo nuevo      → /clear
+La sesión está rota o confundida                   → /clear
+Quieres ver cuánto has consumido antes de compactar → /cost
+```
+
+**Flujo práctico de una sesión larga:**
+
+```
+09:00  Abres Claude Code
+       → /resume       (retomas el trabajo de ayer si existe)
+
+09:00-12:00  Trabajo intenso
+       → /cost          (revisas consumo)
+       → /compact       (liberas tokens antes de la siguiente fase)
+
+12:00-14:00  Segunda fase de trabajo
+       → /status        (guardas el session_id por si necesitas volver)
+
+14:00  Cambias a una tarea totalmente diferente
+       → /clear         (reset limpio)
+
+14:00-17:00  Nueva tarea
+       → /compact       (si la sesión crece mucho)
+       → exit
+```
+
+> **⚡ Modelo óptimo:** el modelo no afecta `/compact`, `/resume` ni `/clear` — son operaciones de gestión de sesión, no de razonamiento. Cambia el modelo *después* de compactar si la siguiente tarea lo requiere.
 
 ---
 
@@ -784,6 +948,409 @@ Sin skill-creator, la mayoría de skills que escribes son mediocres: descripcion
 
 ---
 
+## Instalación y gestión de skills con `/skills`
+
+El comando `/skills` es el gestor de skills integrado en Claude Code. Con él instalas skills desde el marketplace, los listas, actualizas y eliminas — sin tocar el filesystem manualmente.
+
+### Dónde viven los skills instalados
+
+```
+~/.claude/commands/              ← globales (disponibles en todos los proyectos)
+[repo]/.claude/commands/         ← del proyecto (en git, disponibles al equipo)
+```
+
+Los skills del proyecto tienen precedencia sobre los globales si comparten nombre.
+
+### Crear un skill manualmente
+
+La forma más directa: crea un archivo `.md` en la carpeta correcta.
+
+```bash
+# Skill global (tuyo, en todos los repos)
+mkdir -p ~/.claude/commands/
+touch ~/.claude/commands/review-qa.md
+
+# Skill de proyecto (compartido con el equipo via git)
+mkdir -p .claude/commands/
+touch .claude/commands/test-gen.md
+```
+
+El nombre del archivo es el nombre del comando. `review-qa.md` → `/review-qa`.
+
+### Instalar desde el marketplace con `/skills`
+
+```
+# Listar skills instalados actualmente
+/skills list
+
+# Buscar en el marketplace
+/skills search commit
+/skills search qa
+
+# Instalar un skill por nombre
+/skills install commit
+/skills install review-pr
+
+# Instalar desde un repo de GitHub
+/skills install https://github.com/usuario/mi-skill
+
+# Instalar un skill de un plugin ya añadido
+/skills install ralph-skills
+
+# Actualizar un skill instalado
+/skills update commit
+
+# Eliminar un skill
+/skills remove commit
+```
+
+Tras instalar, recarga para que Claude Code reconozca el skill nuevo:
+
+```
+/reload-plugins
+```
+
+O simplemente reinicia la sesión.
+
+### Verificar que el skill está disponible
+
+```
+/skills list
+```
+
+Si el skill aparece en la lista, ya es invocable con `/nombre-del-skill`. Si no aparece, revisa que el archivo `.md` tenga el frontmatter correcto (ver sección de triggers).
+
+### Instalar el starter pack recomendado
+
+Un set mínimo para un perfil QA desde el marketplace:
+
+```
+/skills install commit
+/skills install review-pr
+/skills install skill-creator
+/reload-plugins
+```
+
+Tras el reload:
+
+```
+/commit          → commits estructurados con convenciones del repo
+/review-pr 342   → revisión de PR con criterio QA
+/skill-creator   → meta-skill para crear tus propios skills
+```
+
+### El flujo completo: de cero a skill funcionando
+
+```
+1. Detectas una tarea que repites frecuentemente
+   → "cada vez que hago un PR, tengo que revisar los mismos 5 puntos"
+
+2. Invocas skill-creator para que lo escriba bien
+   /skill-creator
+   → Claude te entrevista y genera el archivo .md
+
+3. El archivo queda en .claude/commands/qa-review.md
+
+4. Lo invocas desde ahora en adelante
+   /qa-review
+   → Claude ejecuta el proceso completo
+
+5. Si quieres compartirlo con el equipo
+   git add .claude/commands/qa-review.md
+   git commit -m "feat: añade skill /qa-review al proyecto"
+```
+
+> **⚡ Modelo óptimo:** `haiku` para `/skills list`, `/skills search` y gestión — son operaciones de consulta. Usa el modelo que corresponda al skill cuando lo invocas: `sonnet` para review de PRs, `haiku` para generación de fixtures simples.
+
+---
+
+## `settings.json` — El panel de control de Claude Code
+
+Toda la configuración de permisos, herramientas permitidas, archivos prohibidos y comportamiento del entorno vive en `settings.json`. Hay dos niveles:
+
+```
+~/.claude/settings.json          ← configuración global (aplica a todos los proyectos)
+[repo]/.claude/settings.json     ← configuración del proyecto (sobreescribe la global)
+```
+
+El archivo del proyecto tiene precedencia. Si ambos definen lo mismo, gana el del proyecto.
+
+### Estructura completa del archivo
+
+```json
+{
+  "model": "claude-sonnet-4-6",
+  "permissions": {
+    "allow": [],
+    "deny": []
+  },
+  "hooks": {},
+  "env": {}
+}
+```
+
+---
+
+### Permisos de herramientas — qué puede y qué no puede hacer Claude
+
+La sección `permissions` controla qué herramientas Claude puede usar sin pedirte confirmación.
+
+**Sintaxis:**
+```json
+{
+  "permissions": {
+    "allow": ["NombreTool", "NombreTool(parámetro)"],
+    "deny":  ["NombreTool", "NombreTool(parámetro)"]
+  }
+}
+```
+
+- `allow` — Claude ejecuta estas herramientas **sin preguntar**
+- `deny` — Claude **nunca** puede usar estas herramientas, aunque tú se lo pidas
+
+**Herramientas disponibles:**
+
+| Tool | Qué hace |
+|---|---|
+| `Read` | Leer archivos |
+| `Write` | Crear o sobreescribir archivos |
+| `Edit` | Editar fragmentos de archivos existentes |
+| `Bash` | Ejecutar comandos de shell |
+| `Grep` | Buscar contenido en archivos |
+| `Glob` | Buscar archivos por patrón |
+| `WebFetch` | Hacer requests HTTP |
+| `WebSearch` | Búsqueda web |
+| `Agent` | Lanzar sub-agentes |
+| `mcp__<server>__<tool>` | Herramienta de un MCP server específico |
+
+**Ejemplo — entorno de solo lectura (auditoría segura):**
+```json
+{
+  "permissions": {
+    "allow": ["Read", "Grep", "Glob"],
+    "deny":  ["Write", "Edit", "Bash", "WebFetch"]
+  }
+}
+```
+Claude puede explorar y analizar el repo, pero no puede modificar nada ni ejecutar comandos.
+
+**Ejemplo — entorno de desarrollo normal (confirmar antes de Bash):**
+```json
+{
+  "permissions": {
+    "allow": ["Read", "Edit", "Write", "Grep", "Glob"],
+    "deny":  []
+  }
+}
+```
+`Bash` no está en `allow`, así que Claude preguntará antes de ejecutar cualquier comando de shell.
+
+**Ejemplo — CI/automatización completa (sin interrupciones):**
+```json
+{
+  "permissions": {
+    "allow": ["Read", "Edit", "Write", "Grep", "Glob", "Bash"],
+    "deny":  ["WebFetch", "WebSearch"]
+  }
+}
+```
+Claude trabaja sin confirmaciones, pero no puede acceder a internet.
+
+---
+
+### Permisos granulares por parámetro
+
+Puedes afinar los permisos al nivel de un argumento concreto de la herramienta.
+
+**Permitir Bash pero solo con comandos específicos:**
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run test*)",
+      "Bash(npx eslint*)",
+      "Bash(git status)",
+      "Bash(git diff*)"
+    ],
+    "deny": ["Bash"]
+  }
+}
+```
+`deny: ["Bash"]` bloquea Bash por defecto. Los `allow` con patrón abren excepciones específicas. Claude puede correr tests y lint, pero no `rm`, `git push` ni nada más.
+
+**Permitir escritura solo en ciertos directorios:**
+```json
+{
+  "permissions": {
+    "allow": [
+      "Write(src/**)",
+      "Edit(src/**)",
+      "Write(tests/**)",
+      "Edit(tests/**)"
+    ],
+    "deny": ["Write", "Edit"]
+  }
+}
+```
+Claude puede editar `src/` y `tests/` pero no puede tocar `infra/`, `.env`, `scripts/` ni nada fuera de esos directorios.
+
+---
+
+### Archivos y directorios prohibidos
+
+Para proteger archivos sensibles, combina `deny` granular con patrones de ruta:
+
+**Proteger secretos y configuración sensible:**
+```json
+{
+  "permissions": {
+    "allow": ["Read", "Edit", "Write", "Grep", "Glob", "Bash"],
+    "deny": [
+      "Read(.env*)",
+      "Write(.env*)",
+      "Edit(.env*)",
+      "Read(*.pem)",
+      "Read(*.key)",
+      "Write(*.pem)",
+      "Write(*.key)",
+      "Read(secrets/**)",
+      "Write(secrets/**)",
+      "Edit(secrets/**)"
+    ]
+  }
+}
+```
+
+**Proteger infraestructura de producción:**
+```json
+{
+  "permissions": {
+    "deny": [
+      "Write(infra/**)",
+      "Edit(infra/**)",
+      "Write(terraform/**)",
+      "Edit(terraform/**)",
+      "Bash(terraform apply*)",
+      "Bash(kubectl delete*)",
+      "Bash(git push*--force*)"
+    ]
+  }
+}
+```
+
+**Proteger archivos de configuración de CI:**
+```json
+{
+  "permissions": {
+    "deny": [
+      "Write(.github/**)",
+      "Edit(.github/**)",
+      "Write(.circleci/**)",
+      "Edit(.circleci/**)"
+    ]
+  }
+}
+```
+
+---
+
+### Modelo por defecto del proyecto
+
+Fija el modelo que Claude Code usa al abrir el proyecto sin pasar `--model`:
+
+```json
+{
+  "model": "claude-haiku-4-5"
+}
+```
+
+Útil para proyectos donde todos los usos son mecánicos (pipelines, CI) y quieres asegurar que nadie gasta tokens de Opus por accidente.
+
+---
+
+### Variables de entorno para hooks
+
+La sección `env` inyecta variables disponibles en los hooks del proyecto:
+
+```json
+{
+  "env": {
+    "PROJECT_ENV": "staging",
+    "SLACK_WEBHOOK": "https://hooks.slack.com/...",
+    "MAX_WARNINGS": "10"
+  }
+}
+```
+
+Accesibles en hooks como `$PROJECT_ENV`, `$SLACK_WEBHOOK`, etc.
+
+---
+
+### Configuración completa de referencia
+
+Un `settings.json` de proyecto realista para un equipo de desarrollo:
+
+```json
+{
+  "model": "claude-sonnet-4-6",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit(src/**)",
+      "Edit(tests/**)",
+      "Write(src/**)",
+      "Write(tests/**)",
+      "Bash(npm run*)",
+      "Bash(npx*)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)"
+    ],
+    "deny": [
+      "Write",
+      "Edit",
+      "Bash",
+      "Read(.env*)",
+      "Write(.env*)",
+      "Edit(.env*)",
+      "Read(*.pem)",
+      "Read(*.key)",
+      "Write(.github/**)",
+      "Edit(.github/**)",
+      "Bash(git push*--force*)",
+      "Bash(rm -rf*)",
+      "Bash(DROP*)",
+      "WebFetch",
+      "WebSearch"
+    ]
+  },
+  "env": {
+    "PROJECT_ENV": "development"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in *.ts|*.tsx) npx eslint --fix \"$CLAUDE_FILE_PATH\" 2>/dev/null ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+> **⚡ Modelo óptimo:** `haiku` para configurar y probar hooks — usa `claude -p "verifica que este hook funciona" --model claude-haiku-4-5`. El razonamiento sobre la configuración en sí no requiere Opus ni Sonnet.
+
+---
+
 ## Hooks — Automatización sin intervención
 
 Los hooks ejecutan comandos de shell automáticamente en respuesta a eventos de Claude Code. Se configuran en `settings.json`.
@@ -855,6 +1422,8 @@ Los hooks ejecutan comandos de shell automáticamente en respuesta a eventos de 
 }
 ```
 
+> **⚡ Modelo óptimo para hooks:** `haiku` — los hooks ejecutan Claude en modo headless para validaciones, linting y notificaciones. Haiku es 5–10x más barato y más rápido que Sonnet para estas tareas mecánicas. Cambia a Sonnet solo si el hook necesita razonamiento real (ej: "decide si este cambio requiere una revisión manual").
+
 ---
 
 ## Comandos slash — la caja de herramientas diaria
@@ -887,10 +1456,26 @@ Claude Code viene con un set de comandos slash built-in. Conocerlos es la difere
 | `/fast` | Alterna modo rápido (respuestas más rápidas del mismo modelo) |
 | `/add-dir` | Añade otro directorio al alcance de Claude (útil en monorepos) |
 
-**Ejemplo:** cambiar a Haiku para tareas triviales y ahorrar:
+**Cuándo cambiar de modelo — tabla de decisión rápida:**
+
+| Tarea | Modelo |
+|---|---|
+| Revisión de PR, refactor multi-archivo, debugging | `sonnet` (default) |
+| Arquitectura, decisión de diseño crítica, bug difícil | `opus` |
+| Pre-commit hook, linting, fixtures, clasificación | `haiku` |
+| Exploración casual, brainstorming, preguntas rápidas | `haiku` |
+| Generación de tests con lógica compleja | `sonnet` |
+| Bucles Ralph / tareas repetitivas en batch | `haiku` |
+
 ```
 /model
-> Haiku 4.5
+> Haiku 4.5   ← para la tarea que viene (validación, fixture, hook)
+
+/model
+> Opus 4.6    ← cuando necesitas el razonamiento más profundo
+
+/model
+> Sonnet 4.6  ← de vuelta al caballo de batalla
 ```
 
 ### Memoria y conocimiento del proyecto
@@ -1249,6 +1834,7 @@ Haiku es rápido y barato — perfecto para validaciones de pre-commit.
 ---
 
 ## El patrón Ralph — bucles autónomos
+Documentacion oficial https://github.com/snarktank/ralph 
 
 "Ralph" es un patrón (más que un plugin formal) popularizado por Geoffrey Huntley que explota el modo headless para poner a Claude a trabajar en bucle hasta que una tarea esté hecha. El nombre viene de la actitud: **incansable, sin recordar lo anterior, siempre empezando de cero, pero con un objetivo claro en un archivo.**
 
@@ -1294,6 +1880,172 @@ Actualiza ese archivo al terminar cada paso.
 ```
 
 Claude, en cada ciclo, lee el progreso, hace un paso incremental, lo persiste en disco, y termina. El siguiente ciclo empieza con contexto limpio pero con el estado actualizado en archivos. El trabajo converge sin que tú estés delante.
+
+### Creacion de Script generico para cualquiero proyecto
+
+Ralph no es un paquete npm ni una extensión: es un script bash que creas una sola vez y reutilizas en cualquier proyecto. Instalarlo toma dos minutos.
+
+**Paso 1 — Crea el script:**
+
+```bash
+cat > ~/bin/ralph.sh << 'EOF'
+#!/usr/bin/env bash
+# ralph.sh — bucle autónomo Claude Code
+# Uso: ralph.sh [PROMPT_FILE] [MAX_ITER] [STOP_FILE]
+
+PROMPT_FILE="${1:-PROMPT.md}"
+MAX_ITER="${2:-50}"
+STOP_MARKER="${3:-DONE}"
+i=0
+
+if [ ! -f "$PROMPT_FILE" ]; then
+  echo "❌ No existe $PROMPT_FILE. Créalo antes de lanzar Ralph."
+  exit 1
+fi
+
+echo "🚀 Ralph iniciado — prompt: $PROMPT_FILE | max: $MAX_ITER iteraciones"
+
+while [ $i -lt $MAX_ITER ]; do
+  echo ""
+  echo "=== Iteración $((i+1))/$MAX_ITER ==="
+  cat "$PROMPT_FILE" | claude -p --dangerously-skip-permissions
+
+  # Condición de parada — busca DONE en el archivo de progreso
+  if grep -rq "^${STOP_MARKER}$" . 2>/dev/null; then
+    echo ""
+    echo "✅ Trabajo completado en $((i+1)) iteraciones"
+    exit 0
+  fi
+
+  i=$((i+1))
+  sleep 3
+done
+
+echo "⚠️  Límite de $MAX_ITER iteraciones alcanzado sin encontrar '${STOP_MARKER}'"
+exit 1
+EOF
+chmod +x ~/bin/ralph.sh
+```
+
+Si `~/bin` no está en tu `$PATH`, añade una línea a tu `.zshrc` o `.bashrc`:
+
+```bash
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+```
+
+**Paso 2 — Verifica que Claude Code está en el PATH:**
+
+```bash
+which claude   # debe devolver /usr/local/bin/claude o similar
+claude --version
+```
+
+Si `claude` no está disponible, revisa la sección de instalación del CLI más arriba.
+
+**Paso 3 — Prepara tu proyecto:**
+
+En la raíz del proyecto que quieres trabajar, crea los archivos que Ralph necesita:
+
+```bash
+# Archivo de prompt (Ralph lo lee en cada iteración)
+touch PROMPT.md
+
+# Archivo de progreso (Ralph lo actualiza; tú lo lees para monitorizar)
+mkdir -p docs
+touch docs/PROGRESS.md
+```
+
+**Paso 4 — Escribe el PROMPT.md:**
+
+El `PROMPT.md` es el corazón de Ralph. Debe ser autoexplicativo para que Claude entienda el estado actual y qué hacer sin contexto previo. Ejemplo mínimo:
+
+```markdown
+# Objetivo
+Elimina todos los usos de `any` en los archivos de src/lib/ reemplazándolos por tipos precisos.
+
+## Cómo avanzar
+1. Lee docs/PROGRESS.md para saber qué archivos ya están tratados.
+2. Elige el siguiente archivo de src/lib/ que no esté en la lista.
+3. Reemplaza los `any` por tipos correctos usando la información del contexto del archivo.
+4. Añade el nombre del archivo a docs/PROGRESS.md.
+5. Si todos los archivos están en la lista, escribe "DONE" como única línea en docs/PROGRESS.md.
+
+## Reglas
+- Solo un archivo por iteración.
+- No modifiques archivos ya procesados.
+- Si hay un caso ambiguo, documéntalo en docs/BLOCKERS.md y pasa al siguiente.
+```
+
+**Paso 5 — Lanza Ralph:**
+
+```bash
+# Desde la raíz del proyecto
+ralph.sh                    # usa PROMPT.md, máx 50 iteraciones
+ralph.sh PROMPT.md 100      # usa PROMPT.md, máx 100 iteraciones
+ralph.sh PROMPT.md 50 DONE  # igual, condición de parada explícita
+```
+
+Para dejarlo corriendo en segundo plano con log:
+
+```bash
+ralph.sh PROMPT.md 100 > ralph.log 2>&1 &
+echo "Ralph PID: $!"
+tail -f ralph.log           # monitoriza en tiempo real
+```
+
+Para detenerlo manualmente:
+
+```bash
+kill $RALPH_PID             # o usa el PID que devolvió el & anterior
+```
+### Alternativa: Ralph como plugin del marketplace
+
+Si prefieres la versión oficial mantenida por la comunidad (`snarktank/ralph`) en lugar del script bash manual, puedes instalarla como plugin. Esta versión incluye el agente `ralph` con soporte para `prd.json` como formato de planificación estructurada.
+
+**Instalación:**
+
+```
+# Paso 1 — Añade el repositorio al marketplace de Claude Code
+/plugin marketplace add snarktank/ralph
+
+# Paso 2 — Instala el skill y el agente
+/plugin install ralph-skills@ralph-marketplace
+/skills install ralph-skills
+
+# Paso 3 — Recarga para que Claude Code reconozca el agente
+/reload-plugins
+```
+
+Verifica que el agente se cargó correctamente:
+
+```
+/agents
+```
+
+Deberías ver `ralph` en la lista de agentes disponibles.
+
+**Flujo de uso con el plugin:**
+
+```
+# 1. Convierte tu plan a prd.json (formato que Ralph entiende)
+/ralph convierte este plan a prd.json: plan-migracion.md
+esto genera un directorio/file -> /ralph/prd.json -> echale un ojo 
+
+# 2. Revisa el prd.json generado antes de lanzar
+#    Verifica tareas, archivos y orden de implementación
+
+# 3. Lanza la implementación
+/ralph implement
+
+```
+
+**¿Qué cambia con el plugin respecto al script bash?** Dos cosas concretas:
+
+1. **El formato del estado.** El script bash usa un `PROGRESS.md` de texto libre — tú decides qué escribir ahí. El plugin usa `prd.json`, un archivo con estructura fija: lista de tareas, archivos a tocar, orden de ejecución. Es más rígido, pero Claude lo interpreta de forma más predecible porque sabe exactamente dónde buscar cada cosa.
+
+2. **El agente incluido.** El plugin instala un agente llamado `ralph` que ya sabe leer el `prd.json` y ejecutar las tareas sin que tú le expliques cómo. Con el script bash, tú escribes el `PROMPT.md` y defines el comportamiento iteración a iteración. Con el plugin, ese comportamiento viene definido de fábrica — menos flexible, pero listo para usar.
+
+> **Cuándo usar cada uno:** script bash → más control, más simple, cero dependencias, el `PROMPT.md` lo escribes tú. Plugin → flujo estandarizado listo para usar, útil si trabajas en equipo o no quieres diseñar el prompt de Ralph desde cero.
 
 ### Ralph mejorado: con condición de parada
 
@@ -1341,6 +2093,8 @@ done
 > **Regla 2:** Cada iteración debe hacer un paso pequeño y verificable. Pasos grandes = errores grandes.
 
 > **Regla 3:** Siempre hay una condición de parada explícita. Ralph sin parada es un servicio, no una tarea.
+
+> **⚡ Modelo óptimo:** `haiku` — Ralph repite la misma llamada decenas de veces. Haiku es rápido y barato para pasos mecánicos e iterativos (migrar un archivo, generar un test, renombrar un símbolo). Sube a `sonnet` solo si cada iteración requiere razonamiento no trivial sobre el código. Con Opus en un bucle de 50 iteraciones el coste puede ser prohibitivo.
 
 ### El pariente supervisado: `/loop`
 
@@ -1644,6 +2398,8 @@ Cada agente trabaja en una rama aislada. Si los tres terminan bien, mergeas. Si 
 - **Dependencias entre tareas:** si B necesita el resultado de A, no las lances a la vez
 - **Coste sensible:** N agentes = N veces el coste. Paraleliza con conciencia
 - **Tareas ambiguas:** lanzar 5 agentes para una tarea mal definida es 5x el desperdicio
+
+> **⚡ Modelo óptimo:** diferencia por rol. El orquestador (tu contexto principal) usa el modelo que tengas activo. Los sub-agentes trabajadores se benefician de `haiku` si su tarea es mecánica (buscar, generar, listar) y de `sonnet` si necesitan razonamiento real (revisar, diseñar, diagnosticar). Lanzar 4 agentes `haiku` en paralelo cuesta aproximadamente lo mismo que 1 llamada a `sonnet`.
 
 ### Secuencial con memoria en archivos — el híbrido
 
@@ -2006,6 +2762,8 @@ Limpia los datos de prueba en afterEach.
 </constraints>
 ```
 
+> **⚡ Modelo óptimo:** `sonnet` — generar una suite de tests requiere entender el contrato del endpoint, razonar sobre edge cases no obvios y mantener coherencia entre los casos. Haiku puede quedarse corto en contratos complejos. Usa Opus solo si el endpoint tiene lógica de negocio muy intrincada.
+
 ### Encontrar gaps en cobertura
 
 ```
@@ -2020,6 +2778,8 @@ No me digas que cubra cosas obvias como "el componente renderiza".
 ---
 
 ## Análisis de bugs complejos
+
+> **⚡ Modelo óptimo:** `opus` — no escatimes modelo cuando estás cazando un bug difícil. Race conditions, problemas de estado asíncrono, bugs que solo ocurren en producción: son exactamente el tipo de razonamiento multi-paso donde Opus supera a Sonnet. El coste de una llamada a Opus es trivial comparado con el tiempo que pierdes si el diagnóstico es incorrecto.
 
 ### El protocolo de diagnóstico QA
 
@@ -2047,6 +2807,8 @@ NO implementes el fix todavía — solo el diagnóstico.
 
 ## Generación de datos de prueba
 
+> **⚡ Modelo óptimo:** `haiku` si el tipo TypeScript está bien definido — generación de fixtures es mecánica cuando el esquema es claro. Sube a `sonnet` si los datos deben satisfacer invariantes de negocio complejos o relaciones entre entidades (ej: wallets con transacciones con constraints específicas).
+
 ```
 Genera fixtures TypeScript para tests del módulo de wallets.
 Necesito:
@@ -2070,6 +2832,8 @@ Usa UUIDs realistas pero ficticios. Usa direcciones crypto válidas según el fo
 ---
 
 ## Review de PRs con criterio QA
+
+> **⚡ Modelo óptimo:** `sonnet` — la revisión de PRs requiere entender cambios en múltiples archivos, razonar sobre impacto en otros módulos y detectar edge cases no obvios. Haiku tiende a perderse en diffs medianos o a dar revisiones superficiales. Usa `opus` si el PR toca lógica de negocio crítica o arquitectura que necesita validación profunda.
 
 Skill recomendado para tu workflow:
 
@@ -2312,6 +3076,8 @@ Un pre-hook que retorna exit != 0 bloquea la ejecución del tool. Úsalo como re
 
 (Úsalo con cuidado — solo en repos experimentales donde cada sesión debe quedar trazada.)
 
+> **⚡ Modelo óptimo para hooks avanzados:** `haiku` — incluso los patrones más sofisticados de esta sección (matchers por tipo de archivo, bloqueo de comandos peligrosos, auto-commit) son validaciones y transformaciones de texto, no razonamiento complejo. Haiku las ejecuta igual de bien a una fracción del coste. Si un hook necesita que Claude *decida* algo no trivial, reconsideralo como skill, no como hook.
+
 ### Patrón: notificaciones a tu terminal externa
 
 ```json
@@ -2517,6 +3283,30 @@ Tu trabajo no es teclear prompts. Tu trabajo es construir el entorno donde Claud
 
 ---
 
+## Guía de selección de modelo — cheat sheet
+
+```
+¿Tarea mecánica y repetitiva?           → haiku
+¿Hook, pre-commit, lint, fixture?       → haiku
+¿Bucle Ralph / batch de N iteraciones? → haiku
+¿Exploración rápida o pregunta simple?  → haiku
+
+¿Generación de código del día a día?    → sonnet  ← default
+¿Revisión de PR o diff mediano?         → sonnet
+¿Generación de test suite?              → sonnet
+¿Refactor con razonamiento?             → sonnet
+
+¿Debugging de bug difícil o raro?       → opus
+¿Decisión de arquitectura?              → opus
+¿Razonamiento multi-paso complejo?      → opus
+¿Output que toma horas corregir si falla? → opus
+```
+
+Cambiar en vivo: `/model` → selecciona el nivel.
+Cambiar en headless: `claude -p "..." --model claude-haiku-4-5`
+
+---
+
 ## Atajos mentales del operador maestro
 
 ```
@@ -2585,6 +3375,9 @@ Tu trabajo no es teclear prompts. Tu trabajo es construir el entorno donde Claud
 
 | Término | Definición operativa |
 |---|---|
+| **Haiku** | Modelo Claude más rápido y barato. Óptimo para hooks, fixtures, bucles Ralph y validaciones mecánicas. ID: `claude-haiku-4-5`. |
+| **Sonnet** | Modelo equilibrado, caballo de batalla del operador. Óptimo para código, tests, revisión de PRs. ID: `claude-sonnet-4-6`. |
+| **Opus** | Modelo más capaz y costoso. Reservado para arquitectura, bugs difíciles y razonamiento multi-paso crítico. ID: `claude-opus-4-6`. |
 | **Token** | Unidad mínima de texto que Claude procesa. ~0.75 palabras. |
 | **Contexto** | Todo lo que Claude puede "leer" en una sesión. |
 | **Compactación** | Resumir el historial para liberar tokens. |
