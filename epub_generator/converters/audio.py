@@ -90,7 +90,47 @@ async def _synthesize_all(
     return await asyncio.gather(*tasks)
 
 
-def _assemble_m4b(mp3_files: list[Path], config: BookConfig, output: Path) -> None:
+def _get_duration_ms(mp3_path: Path) -> int:
+    """Get duration of an MP3 file in milliseconds using ffprobe."""
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "csv=p=0",
+            str(mp3_path),
+        ],
+        capture_output=True, text=True,
+    )
+    return int(float(result.stdout.strip()) * 1000)
+
+
+def _generate_chapter_metadata(
+    mp3_files: list[Path],
+    chapter_titles: list[str],
+    pause_ms: int,
+) -> str:
+    """Generate ffmpeg metadata file content with [CHAPTER] entries."""
+    lines = [";FFMETADATA1"]
+    offset = 0
+    for i, (mp3, title) in enumerate(zip(mp3_files, chapter_titles)):
+        duration = _get_duration_ms(mp3)
+        start = offset
+        end = offset + duration
+        lines.append("")
+        lines.append("[CHAPTER]")
+        lines.append("TIMEBASE=1/1000")
+        lines.append(f"START={start}")
+        lines.append(f"END={end}")
+        lines.append(f"title={title}")
+        offset = end
+        # Add pause between chapters (not after the last one)
+        if i < len(mp3_files) - 1:
+            offset += pause_ms
+    return "\n".join(lines) + "\n"
+
+
+def _assemble_m4b(mp3_files: list[Path], config: BookConfig, output: Path,
+                  chapter_titles: list[str] | None = None) -> None:
     """Combine MP3 chapters into a single M4B with ffmpeg."""
     concat_file = output.parent / "concat.txt"
     concat_file.write_text(
@@ -98,9 +138,18 @@ def _assemble_m4b(mp3_files: list[Path], config: BookConfig, output: Path) -> No
         encoding="utf-8",
     )
 
+    # Generate chapter metadata
+    pause_ms = int(config.audio.chapter_pause * 1000)
+    titles = chapter_titles or [p.stem for p in mp3_files]
+    metadata_content = _generate_chapter_metadata(mp3_files, titles, pause_ms)
+    metadata_file = output.parent / "metadata.txt"
+    metadata_file.write_text(metadata_content, encoding="utf-8")
+
     cmd = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", str(concat_file),
+        "-i", str(metadata_file),
+        "-map_metadata", "1",
         "-metadata", f"title={config.title}",
         "-metadata", f"artist={config.author}",
         "-metadata", f"comment={config.description}",
@@ -110,11 +159,12 @@ def _assemble_m4b(mp3_files: list[Path], config: BookConfig, output: Path) -> No
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     concat_file.unlink(missing_ok=True)
+    metadata_file.unlink(missing_ok=True)
 
     if result.returncode != 0:
-        log.warning("  ⚠️  ffmpeg falló: %s", result.stderr[-200:])
+        log.warning("  ffmpeg fallo: %s", result.stderr[-200:])
     else:
-        log.info("  ✅ M4B ensamblado: %s", output.name)
+        log.info("  M4B ensamblado: %s", output.name)
 
 
 def _slugify(text: str) -> str:
@@ -154,11 +204,16 @@ def convert_audio(
         chapters, voice, chapters_dir, concurrency,
         rate=rate, volume=volume, pitch=pitch,
     ))
-    mp3_files: list[Path] = [p for p in results if p is not None]
+    mp3_files: list[Path] = []
+    chapter_titles: list[str] = []
+    for path, ch in zip(results, chapters):
+        if path is not None:
+            mp3_files.append(path)
+            chapter_titles.append(ch.title)
 
     if not mp3_files:
         raise RuntimeError("No se generó ningún archivo de audio.")
 
-    log.info("  📂 Capítulos en: %s", chapters_dir.relative_to(input_path.parent.parent))
+    log.info("  Capítulos en: %s", chapters_dir.relative_to(input_path.parent.parent))
 
-    _assemble_m4b(mp3_files, config, output)
+    _assemble_m4b(mp3_files, config, output, chapter_titles=chapter_titles)
