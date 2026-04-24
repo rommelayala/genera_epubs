@@ -67,6 +67,9 @@ def clean_for_tts(text: str) -> str:
     # Links — keep label, drop URL
     text = re.sub(r"\[(.+?)\]\(.+?\)", r"\1", text)
 
+    # Bare URLs (not inside markdown link syntax, already processed above)
+    text = re.sub(r"https?://[^\s)]+", "", text)
+
     # Images
     text = re.sub(r"!\[.*?\]\(.+?\)", "", text)
 
