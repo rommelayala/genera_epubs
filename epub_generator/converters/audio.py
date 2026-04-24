@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -31,8 +32,11 @@ def _voice_for(language: str) -> str:
     return SUPPORTED_VOICES.get(language, DEFAULT_VOICE)
 
 
-async def _synthesize(text: str, voice: str, output: Path) -> None:
-    communicate = edge_tts.Communicate(text, voice)
+async def _synthesize(
+    text: str, voice: str, output: Path,
+    rate: str = "-5%", volume: str = "+0%", pitch: str = "+0Hz",
+) -> None:
+    communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
     await communicate.save(str(output))
 
 
@@ -43,6 +47,9 @@ async def _chapter_to_mp3_async(
     index: int,
     total: int,
     semaphore: asyncio.Semaphore,
+    rate: str = "-5%",
+    volume: str = "+0%",
+    pitch: str = "+0Hz",
 ) -> Path | None:
     clean_text = clean_for_tts(chapter.body)
     if not clean_text.strip():
@@ -55,7 +62,7 @@ async def _chapter_to_mp3_async(
     async with semaphore:
         log.info("  Narrando capítulo %d de %d: %s", index, total, chapter.title)
         try:
-            await _synthesize(narration, voice, mp3_path)
+            await _synthesize(narration, voice, mp3_path, rate=rate, volume=volume, pitch=pitch)
         except Exception:
             log.error("  Error narrando capítulo '%s'", chapter.title, exc_info=True)
             return None
@@ -67,11 +74,17 @@ async def _synthesize_all(
     voice: str,
     output_dir: Path,
     concurrency: int,
+    rate: str = "-5%",
+    volume: str = "+0%",
+    pitch: str = "+0Hz",
 ) -> list[Path | None]:
     semaphore = asyncio.Semaphore(concurrency)
     total = len(chapters)
     tasks = [
-        _chapter_to_mp3_async(ch, voice, output_dir, i, total, semaphore)
+        _chapter_to_mp3_async(
+            ch, voice, output_dir, i, total, semaphore,
+            rate=rate, volume=volume, pitch=pitch,
+        )
         for i, ch in enumerate(chapters, start=1)
     ]
     return await asyncio.gather(*tasks)
@@ -105,7 +118,6 @@ def _assemble_m4b(mp3_files: list[Path], config: BookConfig, output: Path) -> No
 
 
 def _slugify(text: str) -> str:
-    import re
     text = text.lower().strip()
     text = re.sub(r"[^\w\s-]", "", text)
     return re.sub(r"[\s_-]+", "-", text)[:60]
@@ -127,15 +139,21 @@ def convert_audio(
 
     markdown = input_path.read_text(encoding="utf-8")
     chapters = extract_chapters(markdown)
-    voice = _voice_for(config.language)
+    voice = config.audio.voice if config.audio.voice else _voice_for(config.language)
 
     chapters_dir = output.parent / f"{output.stem}_chapters"
     chapters_dir.mkdir(parents=True, exist_ok=True)
 
     concurrency = config.audio.concurrency
+    rate = config.audio.rate
+    volume = config.audio.volume
+    pitch = config.audio.pitch
     log.info("  🎙️  Voz: %s | %d capítulos detectados | concurrencia: %d", voice, len(chapters), concurrency)
 
-    results = asyncio.run(_synthesize_all(chapters, voice, chapters_dir, concurrency))
+    results = asyncio.run(_synthesize_all(
+        chapters, voice, chapters_dir, concurrency,
+        rate=rate, volume=volume, pitch=pitch,
+    ))
     mp3_files: list[Path] = [p for p in results if p is not None]
 
     if not mp3_files:
