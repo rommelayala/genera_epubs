@@ -1,131 +1,125 @@
 #!/bin/bash
+set -euo pipefail
 
-# dirname "$0"-> recupera el directorio desde donde se esta ejecutnado el script
-DRAFTS_DIR="$(dirname "$0")/libros_draft"
-COVERS_DIR="$(dirname "$0")/portadas_draft"
-OUTPUT_DIR="$(dirname "$0")/epubs_generados"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DRAFTS_DIR="$SCRIPT_DIR/libros_draft"
+FONTS_DIR="$SCRIPT_DIR/fonts"
+VENV_DIR="$SCRIPT_DIR/.venv"
+PYTHON="$VENV_DIR/bin/python"
+REQUIREMENTS="$SCRIPT_DIR/requirements.txt"
 
-# Detectar sistema operativo y sugerir comando de instalación apropiado
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 detect_install_cmd() {
   local pkg="$1"
   case "$(uname -s)" in
     Darwin)
-      if command -v brew &> /dev/null; then
+      if command -v brew &>/dev/null; then
         echo "brew install $pkg"
       else
         echo "Instala Homebrew desde https://brew.sh y luego: brew install $pkg"
       fi
       ;;
     Linux)
-      if command -v apt-get &> /dev/null; then
+      if command -v apt-get &>/dev/null; then
         echo "sudo apt-get install -y $pkg"
-      elif command -v dnf &> /dev/null; then
+      elif command -v dnf &>/dev/null; then
         echo "sudo dnf install -y $pkg"
-      elif command -v pacman &> /dev/null; then
+      elif command -v pacman &>/dev/null; then
         echo "sudo pacman -S --noconfirm $pkg"
-      elif command -v zypper &> /dev/null; then
+      elif command -v zypper &>/dev/null; then
         echo "sudo zypper install -y $pkg"
-      elif command -v apk &> /dev/null; then
+      elif command -v apk &>/dev/null; then
         echo "sudo apk add $pkg"
       else
         echo "Instala '$pkg' con el gestor de paquetes de tu distro"
       fi
       ;;
     MINGW*|MSYS*|CYGWIN*)
-      echo "Windows detectado. Instala '$pkg' con: winget install $pkg  (o choco install $pkg)"
+      echo "winget install $pkg  (o choco install $pkg)"
       ;;
     *)
-      echo "SO no reconocido ($(uname -s)). Instala '$pkg' manualmente."
+      echo "Instala '$pkg' manualmente."
       ;;
   esac
 }
 
-# Validar pandoc
-if ! command -v pandoc &> /dev/null; then
-  echo "❌ Error: pandoc no está instalado."
-  echo "   Sistema detectado: $(uname -s)"
+# ---------------------------------------------------------------------------
+# 1. check pandoc
+# ---------------------------------------------------------------------------
+if ! command -v pandoc &>/dev/null; then
+  echo "❌ pandoc no está instalado."
   echo "   Instálalo con: $(detect_install_cmd pandoc)"
   exit 1
 fi
 
-mkdir -p "$OUTPUT_DIR"
-mkdir -p "$COVERS_DIR"
-
-generate() {
-  local MD_FILE="$1"
-  local COVER_NAME="$2"
-  local BASE_NAME
-  BASE_NAME=$(basename "$MD_FILE" .md)
-  local OUTPUT_PATH="$OUTPUT_DIR/${BASE_NAME}_${TIMESTAMP}.epub"
-
-  echo "🔄 Convirtiendo: $(basename "$MD_FILE")..."
-
-  local PANDOC_ARGS=(
-    --output="$OUTPUT_PATH"
-    --to=epub3
-    --toc
-    --toc-depth=2
-    --metadata title="$BASE_NAME"
-    --metadata author="Rommel Ayala - QA Lead"
-    --metadata language="es-ES"
-    --syntax-highlighting=espresso
-  )
-
-  # Si el usuario no pasó un parámetro de portada explícito, buscamos uno automático
-  if [ -z "$COVER_NAME" ]; then
-    if [ -f "$COVERS_DIR/${BASE_NAME}.jpg" ]; then
-      COVER_NAME="${BASE_NAME}.jpg"
-    elif [ -f "$COVERS_DIR/${BASE_NAME}.png" ]; then
-      COVER_NAME="${BASE_NAME}.png"
-    fi
+# ---------------------------------------------------------------------------
+# 2. check ebook-convert (solo si hay .pdf en el batch)
+# ---------------------------------------------------------------------------
+if ls "$DRAFTS_DIR"/*.pdf &>/dev/null 2>&1; then
+  if ! command -v ebook-convert &>/dev/null; then
+    echo "❌ ebook-convert (Calibre) no está instalado. Se requiere para procesar PDFs."
+    echo "   Instálalo con: $(detect_install_cmd calibre)"
+    echo "   O ejecuta sin los .pdf para procesar solo los .md."
+    exit 1
   fi
+fi
 
-  # Validamos y aplicamos la portada si se encontró o fue especificada
-  if [ -n "$COVER_NAME" ]; then
-    if [ -f "$COVERS_DIR/$COVER_NAME" ]; then
-      PANDOC_ARGS+=(--epub-cover-image="$COVERS_DIR/$COVER_NAME")
-      echo "🖼️  Usando portada: portadas_draft/$COVER_NAME"
-    else
-      echo "⚠️  Advertencia: No se encontró '$COVER_NAME' en portadas_draft/. Usando portada por defecto."
+# ---------------------------------------------------------------------------
+# 3. check ffmpeg (requerido para formato audio)
+# ---------------------------------------------------------------------------
+if ! command -v ffmpeg &>/dev/null || ! command -v ffprobe &>/dev/null; then
+  echo "⚠️  ffmpeg/ffprobe no están instalados. Se requieren para generar audiolibros."
+  echo "   Instálalo con: $(detect_install_cmd ffmpeg)"
+  echo "   (Se omite si solo generas EPUBs.)"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. check_fonts — descarga Inter si faltan
+# ---------------------------------------------------------------------------
+check_fonts() {
+  if [ ! -f "$FONTS_DIR/Inter-Regular.ttf" ] || [ ! -f "$FONTS_DIR/Inter-Bold.ttf" ]; then
+    echo "🔧 Descargando fuentes Inter..."
+    if ! command -v curl &>/dev/null; then
+      echo "❌ curl no está disponible. Instala curl e inténtalo de nuevo."
+      exit 1
     fi
-  else
-    echo "ℹ️  Sin portada en portadas_draft/ (usando formato por defecto)"
-  fi
-
-  pandoc "$MD_FILE" "${PANDOC_ARGS[@]}"
-
-  if [ $? -eq 0 ]; then
-    echo "✅ Generado: $OUTPUT_PATH"
-  else
-    echo "❌ Falló: $(basename "$MD_FILE")"
+    mkdir -p "$FONTS_DIR"
+    local TMP
+    TMP=$(mktemp -d)
+    curl -fsSL "https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip" \
+      -o "$TMP/inter.zip" || { echo "❌ No se pudo descargar Inter. Verifica tu conexión."; exit 1; }
+    unzip -q "$TMP/inter.zip" -d "$TMP"
+    cp "$(find "$TMP" -name "Inter-Regular.ttf" | head -1)" "$FONTS_DIR/"
+    cp "$(find "$TMP" -name "Inter-Bold.ttf" | head -1)" "$FONTS_DIR/"
+    rm -rf "$TMP"
+    echo "✅ Fuentes instaladas en fonts/"
   fi
 }
 
-# Sin argumentos → todos los .md en libros_draft/
-if [ -z "$1" ]; then
-  FILES=("$DRAFTS_DIR"/*.md)
-  if [ ! -e "${FILES[0]}" ]; then
-    echo "❌ No hay archivos .md en $DRAFTS_DIR"
-    exit 1
-  fi
-  echo "📚 Procesando todos los borradores..."
-  echo ""
-  for f in "${FILES[@]}"; do
-    generate "$f" ""
-    echo ""
-  done
+check_fonts
 
-# Con argumento → solo ese archivo
-else
-  MD_FILE="$DRAFTS_DIR/$1"
-  COVER_ARG="$2" # El segundo parámetro es la portada
-  
-  if [ ! -f "$MD_FILE" ]; then
-    echo "❌ Error: '$1' no existe en $DRAFTS_DIR"
-    echo "📄 Archivos disponibles:"
-    ls "$DRAFTS_DIR"/*.md | xargs -I{} basename {}
-    exit 1
-  fi
-  generate "$MD_FILE" "$COVER_ARG"
+# ---------------------------------------------------------------------------
+# 5. check venv + pip install
+# ---------------------------------------------------------------------------
+if [ ! -d "$VENV_DIR" ]; then
+  echo "🔧 Creando venv en .venv/..."
+  python3 -m venv "$VENV_DIR"
 fi
+
+if [ ! -f "$PYTHON" ]; then
+  echo "❌ No se encontró Python en $VENV_DIR. Recrea el venv manualmente."
+  exit 1
+fi
+
+echo "🔧 Instalando dependencias Python..."
+"$PYTHON" -m pip install --quiet -r "$REQUIREMENTS"
+
+# ---------------------------------------------------------------------------
+# 6. delegate to generate_epub.py
+# ---------------------------------------------------------------------------
+echo "🚀 Ejecutando generate_epub.py..."
+cd "$SCRIPT_DIR"
+"$PYTHON" generate_epub.py "$@"
