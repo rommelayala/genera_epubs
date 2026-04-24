@@ -36,19 +36,45 @@ async def _synthesize(text: str, voice: str, output: Path) -> None:
     await communicate.save(str(output))
 
 
-def _chapter_to_mp3(chapter: Chapter, voice: str, output_dir: Path, index: int) -> Path:
+async def _chapter_to_mp3_async(
+    chapter: Chapter,
+    voice: str,
+    output_dir: Path,
+    index: int,
+    total: int,
+    semaphore: asyncio.Semaphore,
+) -> Path | None:
     clean_text = clean_for_tts(chapter.body)
     if not clean_text.strip():
         log.warning("Capítulo '%s' vacío tras limpiar — omitido", chapter.title)
         return None
 
-    # Prepend the chapter title so TTS lo narra
     narration = f"{chapter.title}.\n\n{clean_text}"
     mp3_path = output_dir / f"{index:02d}_{_slugify(chapter.title)}.mp3"
 
-    log.info("  🔊 Narrando: %s", chapter.title)
-    asyncio.run(_synthesize(narration, voice, mp3_path))
+    async with semaphore:
+        log.info("  Narrando capítulo %d de %d: %s", index, total, chapter.title)
+        try:
+            await _synthesize(narration, voice, mp3_path)
+        except Exception:
+            log.error("  Error narrando capítulo '%s'", chapter.title, exc_info=True)
+            return None
     return mp3_path
+
+
+async def _synthesize_all(
+    chapters: list[Chapter],
+    voice: str,
+    output_dir: Path,
+    concurrency: int,
+) -> list[Path | None]:
+    semaphore = asyncio.Semaphore(concurrency)
+    total = len(chapters)
+    tasks = [
+        _chapter_to_mp3_async(ch, voice, output_dir, i, total, semaphore)
+        for i, ch in enumerate(chapters, start=1)
+    ]
+    return await asyncio.gather(*tasks)
 
 
 def _assemble_m4b(mp3_files: list[Path], config: BookConfig, output: Path) -> None:
@@ -106,13 +132,11 @@ def convert_audio(
     chapters_dir = output.parent / f"{output.stem}_chapters"
     chapters_dir.mkdir(parents=True, exist_ok=True)
 
-    log.info("  🎙️  Voz: %s | %d capítulos detectados", voice, len(chapters))
+    concurrency = config.audio.concurrency
+    log.info("  🎙️  Voz: %s | %d capítulos detectados | concurrencia: %d", voice, len(chapters), concurrency)
 
-    mp3_files: list[Path] = []
-    for i, chapter in enumerate(chapters, start=1):
-        mp3 = _chapter_to_mp3(chapter, voice, chapters_dir, i)
-        if mp3:
-            mp3_files.append(mp3)
+    results = asyncio.run(_synthesize_all(chapters, voice, chapters_dir, concurrency))
+    mp3_files: list[Path] = [p for p in results if p is not None]
 
     if not mp3_files:
         raise RuntimeError("No se generó ningún archivo de audio.")
