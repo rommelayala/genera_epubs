@@ -73,6 +73,26 @@ def clean_for_tts(text: str) -> str:
     # HTML tags
     text = re.sub(r"<[^>]+>", "", text)
 
+    # Emojis unicode
+    text = re.sub(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map
+        "\U0001F1E0-\U0001F1FF"  # flags
+        "\U00002600-\U000026FF"  # misc symbols
+        "\U00002700-\U000027BF"  # dingbats
+        "\U0000FE00-\U0000FE0F"  # variation selectors
+        "\U0001F900-\U0001F9FF"  # supplemental symbols
+        "\U0000200D"             # zero-width joiner
+        "]+",
+        "",
+        text,
+    )
+
+    # Decorative unicode: arrows, misc symbols
+    text = re.sub("[\U00002190-\U000021FF]+", "", text)
+
     # Blockquotes
     text = re.sub(r"^>\s*", "", text, flags=re.MULTILINE)
 
