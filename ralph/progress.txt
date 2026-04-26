@@ -1,4 +1,22 @@
 # Ralph Progress Log
-Started: Sun Apr 26 2026
-Feature: Compilador Multi-Fuente (Ingestion Pipeline) — Fases 1 y 2
-Plan source: docs/tasks/plan_compilador_multifuente.md
+Started: Sun Apr 26 13:00:48 CEST 2026
+---
+
+## Codebase Patterns
+- Dataclasses use `_build_X(data: dict)` helpers, called from `load_config()` with `data.get("section", {}) or {}`
+- For list fields use `data.get("sources", []) or []` pattern
+- mypy requires `types-PyYAML` installed for yaml stubs; use `--ignore-missing-imports` to bypass third-party stubs
+- Pre-existing typecheck errors exist in postprocessors/page_numbering.py, converters/audio.py, generator.py — run mypy only on changed files to avoid noise
+- Tests use `tmp_path` pytest fixture; create both `.yaml` and `.md` companion files for `load_config` tests since it derives yaml_path from input_path.stem
+
+## 2026-04-26 - US-001
+- Added `SourceConfig` dataclass with fields: type, path, url, selector, transcription_service, prefer_subtitles, title, title_level, on_error
+- Added `sources: List[SourceConfig]` field to `BookConfig`
+- Added `_build_sources(data: list)` helper following existing `_build_audio`/`_build_cover` pattern
+- Updated `load_config()` to parse `sources` from YAML using `data.get('sources', []) or []`
+- Created `tests/__init__.py` and `tests/test_config.py` with 7 tests covering all source types and defaults
+- Files changed: epub_generator/config.py, tests/__init__.py, tests/test_config.py
+- **Learnings for future iterations:**
+  - `load_config()` derives yaml_path from `input_path.parent / (input_path.stem + ".yaml")` — tests must pass a `.md` path, not the `.yaml` directly
+  - `List` imported from `typing` for Python 3.9 compat (though project uses 3.13)
+---

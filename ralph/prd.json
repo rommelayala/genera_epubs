@@ -17,7 +17,7 @@
         "Tests pass: test_config carga YAML con sources de cada tipo"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
