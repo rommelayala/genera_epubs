@@ -43,3 +43,18 @@ Started: Sun Apr 26 13:00:48 CEST 2026
   - MarkdownIngestor is minimal: resolve_path + read_text(encoding="utf-8"), no transformation
   - Registry test pattern: `assert "type_key" in INGESTORS` and `assert INGESTORS["type_key"] is ConcreteClass`
 ---
+
+## 2026-04-26 - US-004
+- Created `epub_generator/ingestors/pdf_ingestor.py` with `PdfIngestor(BaseIngestor)`
+- `extract()` uses `pypdf.PdfReader`, iterates pages, skips empty pages with a warning, concatenates with `\n\n`
+- Pypdf imported lazily inside `extract()` so the module loads cleanly even before pypdf is installed
+- Registered `'pdf': PdfIngestor` in `INGESTORS`
+- Added `pypdf>=4.0.0` to requirements.txt; installed in `.venv` with `pip install pypdf`
+- Created `tests/test_pdf_ingestor.py` with 4 tests using a raw-bytes PDF fixture (no reportlab needed)
+- Files changed: epub_generator/ingestors/pdf_ingestor.py, epub_generator/ingestors/__init__.py, tests/test_pdf_ingestor.py, requirements.txt
+- **Learnings for future iterations:**
+  - Create PDF fixtures using raw PDF bytes (minimal `%PDF-1.4` structure) to avoid reportlab/external dependency
+  - Lazy imports (`import pypdf` inside extract()) keep module loadable before package is installed; useful for optional heavy deps
+  - `.venv/bin/pip` is the correct pip for this project; `pip3` or system pip refuse due to PEP 668
+  - `PdfWriter._add_page()` API changed in pypdf 6 — use `add_page(PageObject)` instead
+---
