@@ -11,9 +11,13 @@ con chapter markers navegables, portada embebida e intro/outro narrados.
 ## Índice de Documentación
 
 - **[README.MD](README.MD)** (este archivo) — Uso rápido y guía de inicio
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** — Diseño del sistema, decisiones técnicas, flujos de datos
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — Estructura del código, cómo modificar, cambios comunes
-- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — Problemas comunes, FAQs, debugging
+- **[docs/context.md](docs/context.md)** — Contexto AIQ e identidad del autor (Crucial para Inteligencias Artificiales)
+- **[docs/architecture.md](docs/architecture.md)** — Diseño del sistema, soporte Multi-IA y arquitectura de directorios
+- **[docs/page-numbering.md](docs/page-numbering.md)** — Sistema de inyección automática de numeración en EPUBs
+- **[docs/troubleshooting.md](docs/troubleshooting.md)** — Diagnóstico de errores, FAQs, debugging
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — Reglas para contribuidores, pull requests y desarrollo
+- **[AGENTS.md](AGENTS.md)** — Reglas OBLIGATORIAS para IAs sobre generación y estilo
+
 
 ---
 
@@ -29,24 +33,26 @@ El launcher crea el venv y descarga las fuentes Inter automáticamente en el pri
 
 ---
 
-## Estructura del proyecto
+## Estructura del Proyecto y Soporte Multi-IA
 
-```
+El repositorio está diseñado bajo las mejores prácticas universales tanto para un impecable pipeline local de operaciones (EPUB/M4B) como para asegurar la interacción libre de fricciones con sistemas Multi-IA (Gemini, Claude 3.5, Cursor, Windsurf).
+
+```text
 genera_epubs/
-├── generate_epub.sh          ← entrada: verifica deps, crea venv, lanza Python
-├── generate_epub.py          ← orquestador CLI + paralelismo
-├── requirements.txt          ← Pillow, PyYAML
-├── epub_generator/
-│   ├── config.py             ← lee {basename}.yaml → BookConfig
-│   ├── cover.py              ← genera portada con Pillow
-│   ├── generator.py          ← dispatcher por extensión
-│   └── converters/
-│       ├── markdown.py       ← pandoc wrapper
-│       └── pdf.py            ← ebook-convert wrapper
-├── fonts/                    ← Inter Regular + Bold (auto-descargadas)
-├── libros_draft/             ← fuentes: .md y/o .pdf + .yaml por libro
-├── portadas_draft/           ← portadas generadas o manuales
-└── epubs_generados/          ← EPUBs de salida (sin timestamp, git controla versiones)
+├── .cursorrules              ← Archivo pivot universal. Orquesta a la IA para leer el contexto
+├── AGENTS.md                 ← Reglas maestras (Fuente de la verdad técnica para los LLM)
+├── docs/                     ← Documentación centralizada y estructurada
+│   ├── context.md            ← Identidad, prioridades y filosofía de trabajo de Rommel
+│   ├── architecture.md       ← Diseño del sistema y flujos de arquitectura
+│   └── tasks/                ← Tareas pendientes y planes de implementación a futuro
+├── .claude/commands/         ← Skills personalizadas para la app desktop de Claude 
+├── libros_draft/             ← Fuentes (input): archivos .md, .pdf y YAML sidecar
+├── portadas_draft/           ← Diseño: portadas estáticas manuales o autogeneradas
+├── epubs_generados/          ← Salida (output): EPUBs finales compilados
+├── audios_generados/         ← Salida (output): Audiolibros M4B nativos
+├── generate_epub.sh          ← Lanzador CLI principal (verifica dependencias y lanza Python)
+├── generate_epub.py          ← Orquestador y manejador por procesos
+└── epub_generator/           ← Motor pesado interno (pandoc wrappers, EdgeTTS, Pillow)
 ```
 
 ---

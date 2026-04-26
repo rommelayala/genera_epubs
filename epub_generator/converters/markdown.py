@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from epub_generator.config import BookConfig
+from epub_generator.postprocessors.page_numbering import add_page_numbers
 
 _STYLES_DIR = Path(__file__).parent.parent / "styles"
 
@@ -40,3 +41,6 @@ def convert_markdown(
             f"pandoc falló (rc={result.returncode}):\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
+
+    # Post-process: add page numbers (e.g., "2/40")
+    add_page_numbers(output)

@@ -1,7 +1,6 @@
 # Playwright + TypeScript: Nivel Intermedio-Avanzado
 ## El libro del QA que quiere dominar el navegador, no solo usarlo
 
-**Por Claude Sonnet 4.6 — encargado por Rommel Ayala, QA Lead @ AIQ®**
 **Fecha:** Marzo 2026
 
 ---
@@ -833,6 +832,30 @@ const headers = response.headers();
 ```
 
 ## `page.route()` — el interceptor más potente
+
+`page.route()` te permite interceptar las peticiones de red a nivel de navegador. Es extremadamente útil no solo para mockear, sino para inspeccionar (loggear) lo que la aplicación realmente envía y recibe.
+
+### Debugging de requests/responses en vivo
+
+Si necesitas ver exactamente qué payload se envía al servidor y qué devuelve, sin romper el flujo real de la prueba, puedes usar este patrón:
+
+```typescript
+await page.route('**/api/v1/data', async route => {
+  const req = route.request();
+  
+  // 1. Vemos lo que se envía (El request)
+  console.log(`[ENVIANDO] -> ${req.method()} ${req.url()}`, req.postDataJSON());
+  
+  // 2. Ejecutamos la petición real
+  const response = await route.fetch();
+  
+  // 3. Vemos lo que se recibe (El response)
+  console.log(`[RECIBIENDO] <- ${response.status()}`);
+  
+  // 4. Dejamos que el navegador continúe con la respuesta real
+  await route.fulfill({ response });
+});
+```
 
 ```typescript
 // Mockear una API completa
@@ -2586,7 +2609,7 @@ npx cucumber-js --format @cucumber/pretty-formatter
 
 ### ¿Playwright Test runner o Cucumber runner?
 
-Esta es la pregunta que más confunde al integrar ambas herramientas. La respuesta corta:
+Esta es la pregunta que más confunde al integrar ambas herramientas. La respuesta corta: **Depende de tu audiencia y de la fase del proyecto**, pero la mejor práctica en proyectos mixtos es mantenerlos separados y orquestarlos vía `npm scripts`.
 
 | Situación | Usa |
 |---|---|
@@ -2594,7 +2617,7 @@ Esta es la pregunta que más confunde al integrar ambas herramientas. La respues
 | Escenarios BDD con stakeholders no técnicos | Cucumber (`npx cucumber-js`) |
 | Ambos en el mismo proyecto | Scripts separados en `package.json` |
 
-**No los mezcles en la misma ejecución.** Playwright Test y Cucumber son runners independientes. Playwright puede estar presente como librería (para `chromium`, `Page`, etc.) sin que uses su runner. El `cucumber-js` es el que orquesta los escenarios Gherkin.
+**No los mezcles en la misma ejecución.** Playwright Test y Cucumber son runners independientes. Playwright puede estar presente como librería (para `chromium`, `Page`, etc.) sin que uses su runner. El `cucumber-js` es el que orquesta los escenarios Gherkin. La mejor opción arquitectónica es centralizar toda la ejecución en comandos de Node estándar:
 
 ```json
 {
