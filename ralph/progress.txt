@@ -20,3 +20,26 @@ Started: Sun Apr 26 13:00:48 CEST 2026
   - `load_config()` derives yaml_path from `input_path.parent / (input_path.stem + ".yaml")` — tests must pass a `.md` path, not the `.yaml` directly
   - `List` imported from `typing` for Python 3.9 compat (though project uses 3.13)
 ---
+
+## 2026-04-26 - US-002
+- Created `epub_generator/ingestors/__init__.py` with `INGESTORS: Dict[str, Type[BaseIngestor]] = {}`
+- Created `epub_generator/ingestors/base.py` with `BaseIngestor(ABC)` abstract class
+- `BaseIngestor.extract(source, project_root) -> str` is abstractmethod
+- `BaseIngestor.resolve_path(source, project_root)` expands ~, resolves relative to project_root, raises FileNotFoundError if missing
+- Created `tests/test_base_ingestor.py` covering absolute, relative, tilde, and nonexistent paths
+- Files changed: epub_generator/ingestors/__init__.py, epub_generator/ingestors/base.py, tests/test_base_ingestor.py
+- **Learnings for future iterations:**
+  - `Dict[str, Type[BaseIngestor]]` is the registry type — future ingestors must inherit BaseIngestor and be added to INGESTORS
+  - `from __future__ import annotations` needed in all ingestor files for forward refs
+---
+
+## 2026-04-26 - US-003
+- Created `epub_generator/ingestors/markdown_ingestor.py` with `MarkdownIngestor(BaseIngestor)`
+- `extract()` calls `resolve_path()` then reads the file as UTF-8 and returns content unchanged
+- Registered `'markdown': MarkdownIngestor` in `INGESTORS` dict in `__init__.py`
+- Created `tests/test_markdown_ingestor.py` with 3 tests: content returned, UTF-8 encoding, and registry check
+- Files changed: epub_generator/ingestors/__init__.py, epub_generator/ingestors/markdown_ingestor.py, tests/test_markdown_ingestor.py
+- **Learnings for future iterations:**
+  - MarkdownIngestor is minimal: resolve_path + read_text(encoding="utf-8"), no transformation
+  - Registry test pattern: `assert "type_key" in INGESTORS` and `assert INGESTORS["type_key"] is ConcreteClass`
+---

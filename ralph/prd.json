@@ -33,7 +33,7 @@
         "Tests pass: test_base_ingestor cubre resolve_path con absoluto, relativo, ~, e inexistente"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -48,7 +48,7 @@
         "Tests pass: test_markdown_ingestor con fixture sample.md verifica contenido devuelto"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
