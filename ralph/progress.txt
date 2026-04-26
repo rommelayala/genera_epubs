@@ -58,3 +58,16 @@ Started: Sun Apr 26 13:00:48 CEST 2026
   - `.venv/bin/pip` is the correct pip for this project; `pip3` or system pip refuse due to PEP 668
   - `PdfWriter._add_page()` API changed in pypdf 6 — use `add_page(PageObject)` instead
 ---
+
+## 2026-04-26 - US-005
+- Created `epub_generator/compiler.py` with `compile_book(config, basename, project_root=None) -> Path`
+- `_validate_sources(sources, project_root)` checks: type in INGESTORS, required fields (url for url/youtube, path for others), path existence after expanduser/resolve
+- `compile_book` raises ValueError('No hay sources definidos') for empty sources
+- Compilation body stubs with `NotImplementedError` (US-006 will complete it)
+- Created `tests/test_compiler_validation.py` with 7 tests covering all required error cases plus error message index check
+- Files changed: epub_generator/compiler.py, tests/test_compiler_validation.py
+- **Learnings for future iterations:**
+  - Functions that always raise before returning still satisfy mypy return type annotations
+  - `Optional[Path] = None` with `Path.cwd()` fallback is a clean pattern for optional project_root
+  - `_URL_TYPES = {"url", "youtube"}` set defined in compiler.py; types not yet in INGESTORS still fail the `type in INGESTORS` check first
+---

@@ -83,7 +83,7 @@
         "Tests pass: test_compiler_validation cubre type invalido, campo ausente, path inexistente, sources vacio"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
