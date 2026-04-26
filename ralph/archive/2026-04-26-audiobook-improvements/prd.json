@@ -1,0 +1,199 @@
+{
+  "project": "genera_epubs",
+  "branchName": "ralph/audiobook-improvements",
+  "description": "Mejoras completas al sistema de audiolibros — TTS paralelo, chapter markers, portada embebida, limpieza de texto, configuracion por libro, cache y intro/outro automatico",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Agregar AudioConfig dataclass a config.py",
+      "description": "Como desarrollador, necesito la dataclass AudioConfig en config.py para que los demas stories puedan leer configuracion de audio desde el YAML sidecar.",
+      "acceptanceCriteria": [
+        "Agregar dataclass AudioConfig en epub_generator/config.py con campos: voice (default: ''), rate (default: '-5%'), volume (default: '+0%'), pitch (default: '+0Hz'), bitrate (default: '96k'), chapter_pause (default: 1.5), concurrency (default: 5), intro (default: true), outro (default: true)",
+        "Agregar campo audio: AudioConfig en BookConfig con field(default_factory=AudioConfig)",
+        "En load_config(), parsear seccion audio: del YAML sidecar igual que se parsea cover: (con _build_audio helper)",
+        "Si la seccion audio: no existe en el YAML, usar defaults de AudioConfig",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Esta es la base de datos de configuracion que usan US-002 a US-012. Debe completarse primero."
+    },
+    {
+      "id": "US-002",
+      "title": "Requerir ffmpeg y ffprobe al inicio de convert_audio",
+      "description": "Como usuario, quiero un error claro al inicio si ffmpeg no esta instalado, en lugar de que falle a mitad del proceso.",
+      "acceptanceCriteria": [
+        "Al inicio de convert_audio() en audio.py, verificar que ffmpeg y ffprobe estan en PATH usando shutil.which()",
+        "Si no estan disponibles, lanzar RuntimeError con mensaje: 'ffmpeg y ffprobe son requeridos para generar audiolibros. Instala con: brew install ffmpeg / sudo apt install ffmpeg'",
+        "En generate_epub.sh, agregar check de ffmpeg similar al check de pandoc (seccion nueva entre check de ebook-convert y check de fonts)",
+        "Eliminar el check condicional de shutil.which('ffmpeg') que existe dentro de _assemble_m4b (ya no es necesario porque se valida al inicio)",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Limpiar frontmatter YAML del texto antes de TTS",
+      "description": "Como oyente, no quiero escuchar el frontmatter YAML narrado al inicio del libro.",
+      "acceptanceCriteria": [
+        "En markdown_cleaner.py, agregar funcion strip_frontmatter(text: str) -> str que elimine el bloque YAML frontmatter (---\\n...\\n---) del inicio del texto",
+        "La funcion solo elimina el frontmatter si esta al inicio del texto (posicion 0 o con whitespace antes)",
+        "No afecta separadores horizontales --- que aparezcan despues del inicio del documento",
+        "Llamar strip_frontmatter() al inicio de extract_chapters() antes de buscar headings",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Limpiar emojis y caracteres especiales para TTS",
+      "description": "Como oyente, no quiero que el narrador diga nombres de emojis o caracteres unicode decorativos.",
+      "acceptanceCriteria": [
+        "En markdown_cleaner.py, agregar en clean_for_tts() un paso que elimine emojis unicode (usar regex con rangos: U+1F600-U+1F64F, U+1F300-U+1F5FF, U+1F680-U+1F6FF, U+1F1E0-U+1F1FF, U+2600-U+26FF, U+2700-U+27BF, U+FE00-U+FE0F, U+1F900-U+1F9FF, U+200D)",
+        "Eliminar caracteres decorativos unicode: flechas (U+2190-U+21FF), bullets decorativos, simbolos matematicos que no aportan",
+        "Preservar caracteres hispanicos: tildes, ene, signos de interrogacion/exclamacion invertidos, comillas espanolas",
+        "Agregar el paso despues de la limpieza de HTML tags y antes de colapsar lineas vacias",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Limpiar URLs sueltas para TTS",
+      "description": "Como oyente, no quiero que el narrador deletree URLs completas caracter por caracter.",
+      "acceptanceCriteria": [
+        "En markdown_cleaner.py, agregar en clean_for_tts() un paso que detecte URLs sueltas con regex (https?://[^\\s)]+) que NO esten dentro de sintaxis markdown [texto](url)",
+        "Reemplazar URLs sueltas por cadena vacia (eliminarlas silenciosamente)",
+        "Agregar el paso DESPUES de limpiar links markdown (que ya remueve [texto](url) quedandose con texto) para no interferir",
+        "URLs dentro de bloques de codigo ya fueron reemplazadas por CODE_REDIRECT asi que no requieren tratamiento",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Paralelizar sintesis TTS con asyncio.gather",
+      "description": "Como usuario, quiero que los capitulos se narren en paralelo para reducir el tiempo de generacion de 20x a ~4x.",
+      "acceptanceCriteria": [
+        "En audio.py, refactorizar _chapter_to_mp3 para que sea una funcion async (renombrar a _chapter_to_mp3_async)",
+        "Crear una funcion async _synthesize_all(chapters, voice, output_dir, concurrency) que use asyncio.Semaphore(concurrency) y asyncio.gather() para narrar capitulos en paralelo",
+        "Leer concurrency desde config.audio.concurrency (default 5 definido en US-001)",
+        "En convert_audio(), reemplazar el loop secuencial por un unico asyncio.run(_synthesize_all(...))",
+        "Mostrar progreso en log: 'Narrando capitulo X de N: {title}'",
+        "Si un capitulo falla, los demas continuan. Reportar errores al final con log.error",
+        "El type hint de la funcion que antes retornaba Path | None ahora retorna Path | None correctamente",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Depende de US-001 para leer config.audio.concurrency"
+    },
+    {
+      "id": "US-007",
+      "title": "Pasar voz, rate, volume y pitch configurables a edge-tts",
+      "description": "Como autor, quiero configurar la voz y parametros de narracion del audiolibro desde el YAML.",
+      "acceptanceCriteria": [
+        "En audio.py, leer config.audio.voice, config.audio.rate, config.audio.volume, config.audio.pitch",
+        "Si config.audio.voice esta vacio, usar el mapeo automatico por idioma existente (SUPPORTED_VOICES)",
+        "Pasar rate, volume y pitch a edge_tts.Communicate(): edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)",
+        "Eliminar el import redundante de re dentro de _slugify (ya se importa al inicio del archivo)",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Depende de US-001 para AudioConfig"
+    },
+    {
+      "id": "US-008",
+      "title": "Chapter markers reales en M4B con ffprobe",
+      "description": "Como oyente, quiero navegar entre capitulos en mi reproductor de audiolibros.",
+      "acceptanceCriteria": [
+        "Crear funcion _get_duration_ms(mp3_path: Path) -> int que use ffprobe para obtener duracion en milisegundos: ffprobe -v error -show_entries format=duration -of csv=p=0 {path}",
+        "Crear funcion _generate_chapter_metadata(mp3_files: list[Path], chapter_titles: list[str], pause_ms: int) -> str que genere el contenido del archivo de metadata ffmpeg con entries [CHAPTER] con TIMEBASE=1/1000, START, END y title",
+        "Los timestamps deben sumar correctamente considerando las pausas entre capitulos (pause_ms del config.audio.chapter_pause * 1000)",
+        "En _assemble_m4b, escribir el metadata a un archivo temporal, y pasar -i metadata.txt -map_metadata 1 al comando ffmpeg",
+        "Limpiar el archivo de metadata temporal despues del ensamblado",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Depende de US-002 (ffprobe disponible)"
+    },
+    {
+      "id": "US-009",
+      "title": "Portada embebida y pausas entre capitulos en M4B",
+      "description": "Como oyente, quiero ver la portada del libro y escuchar pausas naturales entre capitulos.",
+      "acceptanceCriteria": [
+        "En convert_audio(), dejar de ignorar el parametro cover: renombrar _cover a cover",
+        "En _assemble_m4b, si cover existe y es JPG o PNG, agregar al comando ffmpeg: -i {cover} -map 0:a -map 1:v -c:v mjpeg -disposition:v attached_pic (usar -c:v png si la portada es PNG)",
+        "Si cover no existe, omitir la portada con warning en log pero continuar el ensamblado",
+        "Generar archivo de silencio temporal con ffmpeg: ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t {chapter_pause} -q:a 9 silence.mp3",
+        "En concat.txt, intercalar el archivo de silencio entre cada par de capitulos",
+        "Leer chapter_pause desde config.audio.chapter_pause (default 1.5s de US-001)",
+        "Cambiar bitrate de -b:a 64k a -b:a {config.audio.bitrate} (default 96k de US-001)",
+        "Limpiar archivo de silencio temporal despues del ensamblado",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Implementado por Ralph en US-008 (portada, pausas, bitrate ya estaban en _assemble_m4b)"
+    },
+    {
+      "id": "US-010",
+      "title": "Intro y outro narrados automaticos",
+      "description": "Como oyente, quiero que el audiolibro comience con una introduccion y termine con un cierre narrado.",
+      "acceptanceCriteria": [
+        "Si config.audio.intro es true (default), generar texto: 'Este es el audiolibro: {config.title}. Escrito por {config.author}. {config.description}' y narrarlo como 00_intro.mp3",
+        "Si config.audio.outro es true (default), generar texto: 'Fin del audiolibro: {config.title}. Gracias por escuchar.' y narrarlo como archivo outro MP3",
+        "Insertar intro al inicio y outro al final de la lista de mp3_files antes de pasar a _assemble_m4b",
+        "Incluir intro y outro en los chapter markers del M4B con titulos 'Introduccion' y 'Cierre'",
+        "Si intro u outro es false en el YAML, omitir el correspondiente",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Implementado manualmente: _synthesize_intro_outro() en audio.py"
+    },
+    {
+      "id": "US-011",
+      "title": "Cache por capitulo con manifiesto JSON",
+      "description": "Como usuario, quiero que al re-generar un audiolibro tras editar un solo capitulo, solo se re-narre ese capitulo.",
+      "acceptanceCriteria": [
+        "Crear/leer archivo {chapters_dir}/cache_manifest.json con estructura: {filename: {hash: sha256_hex, duration_ms: int}}",
+        "Antes de narrar un capitulo, calcular SHA-256 del texto limpio (resultado de clean_for_tts, no del markdown original)",
+        "Si el hash coincide con el del manifiesto Y el archivo MP3 existe en disco, saltar la narracion y logear 'Capitulo X sin cambios, usando cache'",
+        "Si el hash no coincide o el MP3 no existe, narrar y actualizar la entrada en el manifiesto",
+        "Guardar el manifiesto actualizado al disco despues de procesar todos los capitulos",
+        "Agregar argumento --no-cache a argparse en generate_epub.py que ignore el manifiesto y re-narre todo",
+        "Pasar el flag no_cache a convert_audio() y a _process_book()",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Implementado manualmente: _synthesize_with_cache() con SHA-256 + --no-cache en CLI"
+    },
+    {
+      "id": "US-012",
+      "title": "Documentar configuracion de audio en README",
+      "description": "Como usuario, quiero saber que opciones de audio puedo configurar en el YAML sidecar.",
+      "acceptanceCriteria": [
+        "Agregar seccion 'Configuracion de audio (YAML sidecar)' en README.MD despues de la seccion de configuracion de portadas",
+        "Incluir ejemplo YAML con todos los campos de audio: voice, rate, volume, pitch, bitrate, chapter_pause, concurrency, intro, outro",
+        "Explicar los defaults y por que se eligieron (best practices de audiolibros)",
+        "Incluir ejemplo de uso con --format audio y --no-cache",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Implementado manualmente: seccion Audiolibros completa en README.MD"
+    }
+  ]
+}

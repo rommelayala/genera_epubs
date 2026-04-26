@@ -1,4 +1,109 @@
-.venv/
+# =====================================================================
+# Python
+# =====================================================================
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+
+# =====================================================================
+# Virtual environments
+# =====================================================================
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# =====================================================================
+# Testing / linting / type checking
+# =====================================================================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# =====================================================================
+# Environment variables / secrets
+# =====================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# =====================================================================
+# IDE / editores
+# =====================================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# =====================================================================
+# Sistema operativo
+# =====================================================================
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+Icon?
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+.directory
+
+# =====================================================================
+# Logs y temporales
+# =====================================================================
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+
+# =====================================================================
+# Salidas del pipeline (especifico del proyecto)
+# =====================================================================
+# Audios: archivos pesados (.m4b, .mp3), no van al repo
+audios_generados/*.m4b
+audios_generados/*.mp3
+audios_generados/*.wav
+audios_generados/.cache/
+
+# Master Markdown intermedio del compilador multi-fuente
+libros_draft/*_compiled.md
+
+# Nota: epubs_generados/ SI se trackea (artefactos de release)
+# Nota: portadas_draft/ SI se trackea
+# Nota: libros_draft/*.md y *.yaml SI se trackean (contenido fuente)

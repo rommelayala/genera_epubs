@@ -12,7 +12,13 @@ Estos comandos te ayudan a ver cómo se está conectando tu computadora a intern
     ```bash
     cat ~/.ssh/config
     ```
-    *Para qué sirve:* Te muestra qué llaves están asignadas a qué páginas web (por ejemplo, para separar tu cuenta personal de la de trabajo).
+    *Para qué sirve:* Te muestra qué llaves están asignadas a qué hosts (por ejemplo, para separar tu cuenta personal de la de trabajo en GitHub).
+
+*   **Listar todas las llaves disponibles en tu equipo:**
+    ```bash
+    ls -la ~/.ssh/
+    ```
+    *Para qué sirve:* Te enseña qué archivos de llaves tienes guardados. Las que terminan en `.pub` son las públicas (las que se comparten); las que no, son las privadas (nunca se comparten).
 
 *   **Ver qué llaves SSH están cargadas en la memoria (el agente):**
     ```bash
@@ -22,9 +28,9 @@ Estos comandos te ayudan a ver cómo se está conectando tu computadora a intern
 
 *   **Ver el contenido de tu llave pública (para copiar a GitHub):**
     ```bash
-    cat ~/.ssh/id_ed25519_personal.pub
+    cat ~/.ssh/id_ed25519.pub
     ```
-    *Para qué sirve:* Imprime en pantalla el texto exacto de la llave que debes registrar en la página de GitHub.
+    *Para qué sirve:* Imprime en pantalla el texto exacto de la llave que debes registrar en la página de GitHub. Sustituye `id_ed25519.pub` por el nombre real del archivo que viste con `ls -la ~/.ssh/` (por ejemplo, `id_ed25519_personal.pub` o `id_rsa.pub`).
 
 *   **Hacer una prueba de conexión detallada ("Modo Dios"):**
     ```bash
@@ -63,7 +69,7 @@ Si al intentar hacer `git pull` o `git push` te encuentras con el error `Permiss
    ```bash
    ssh -T git@github.com
    ```
-   Si el mensaje de respuesta no es un éxito (ej. *"Hi usuario! You've successfully authenticated..."*), hay un problema con tu llave.
+   Si el mensaje de respuesta no es un éxito (algo como `Hi usuario! You've successfully authenticated...`), hay un problema con tu llave.
 
 2. **Verifica si la llave está registrada en GitHub:**
    Incluso si la terminal está mandando la llave correcta, GitHub puede rechazarla si no la has registrado en tu cuenta.
@@ -71,4 +77,21 @@ Si al intentar hacer `git pull` o `git push` te encuentras con el error `Permiss
    * Agrega tu llave pública usando el botón "New SSH key".
 
 3. **Cuentas múltiples (Trabajo y Personal):**
-   Si utilizas múltiples cuentas en el mismo equipo, asegúrate de tener tu archivo `~/.ssh/config` correctamente configurado para diferenciar el host (ej. `github.com` vs `github.com-trabajo`), y asegúrate de iniciar sesión en la cuenta correcta en el navegador cuando agregues la llave.
+   Si utilizas varias cuentas en el mismo equipo, asegúrate de tener tu archivo `~/.ssh/config` correctamente configurado para diferenciar el host (por ejemplo, `github.com` vs `github.com-trabajo`), y de iniciar sesión en la cuenta correcta en el navegador cuando agregues la llave.
+
+   Ejemplo mínimo de `~/.ssh/config`:
+   ```
+   # Cuenta personal
+   Host github.com
+     HostName github.com
+     User git
+     IdentityFile ~/.ssh/id_ed25519_personal
+
+   # Cuenta de trabajo (alias)
+   Host github.com-trabajo
+     HostName github.com
+     User git
+     IdentityFile ~/.ssh/id_ed25519_trabajo
+   ```
+
+   Con esa configuración, los repos de trabajo deben usar la URL `git@github.com-trabajo:org/repo.git` para que SSH elija la llave correcta.
