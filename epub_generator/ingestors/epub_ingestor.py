@@ -17,16 +17,15 @@ class EpubIngestor(BaseIngestor):
         from ebooklib import epub
         from markdownify import MarkdownConverter
 
-        path = self.resolve_path(source, project_root)
-        book = epub.read_epub(str(path), options={"ignore_ncx": True})
-
-        class ImageReplacingConverter(MarkdownConverter):
-            def convert_img(self, el, text, *args, **kwargs):
+        class _ImageReplacingConverter(MarkdownConverter):  # type: ignore[misc]
+            def convert_img(self, el, text, *args, **kwargs):  # type: ignore[override]
                 src = el.get("src", "") or el.get("xlink:href", "")
                 name = Path(src).name if src else "imagen"
                 return f"[Imagen omitida: {name}]"
 
-        converter = ImageReplacingConverter(heading_style="ATX")
+        path = self.resolve_path(source, project_root)
+        book = epub.read_epub(str(path), options={"ignore_ncx": True})
+        converter = _ImageReplacingConverter(heading_style="ATX")
 
         parts: list[str] = []
         for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
