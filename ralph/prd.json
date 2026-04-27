@@ -102,7 +102,7 @@
         "Tests pass: test_compiler cubre md+pdf, inyeccion/no-duplicado de cabecera, on_error=skip vs abort, archivo escrito en ruta esperada"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -118,7 +118,7 @@
         "Tests pass: test_resolve_input cubre .md, .yaml con sources, .yaml inexistente; test de regresion verifica que .md sin yaml asociado sigue funcionando"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -134,7 +134,7 @@
         "Tests pass: test_main_discovery cubre solo md, solo yaml-con-sources, ambos coexistiendo (yaml gana), yaml sidecar sin sources (no entra)"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -150,7 +150,7 @@
         "Tests de regresion pass: generar EPUB de un libro existente sin sources (ej. fundamentos-ia-libro) produce el mismo binario que en main (comparar hash o tamanho con tolerancia)"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -171,7 +171,7 @@
         "Tests pass: test_url_ingestor con HTTP mockeado (responses o pytest-httpserver) cubre selector aplicado, eliminacion de scripts, fallback de imagen, timeout con on_error"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -190,7 +190,7 @@
         "Tests pass: test_epub_ingestor con fixture sample.epub (2 capitulos) verifica orden de spine y conversion a Markdown"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -205,7 +205,7 @@
         "Tests pass"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": ""
     }
   ]
