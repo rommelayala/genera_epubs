@@ -1,8 +1,29 @@
-title: "Claude Uso Maestro — De Usuario Promedio a Operador de Élite"
+title: "Claude - Uso Maestro"
 author: "Rommel Ayala"
-description: "Guía completa para dominar Claude con framework 5W1H y perfil QA. De uso básico a operador avanzado."
 language: "es-ES"
-date: "2026"
+description: "Guía completa para dominar Claude: API, prompting y casos de uso avanzados."
+
 cover:
-  title: "Claude Uso Maestro"
-  subtitle: "De Usuario Promedio a Operador de Élite"
+  title: "Claude - Uso Maestro"
+  subtitle: "De principiante a experto"
+  bg_color: "#1a1a2e"
+  accent_color: "#e94560"
+
+sources:
+  - type: markdown
+    path: libros_draft/claude-uso-maestro.md
+    title: "Introducción y Conceptos Base"
+    title_level: 1
+
+  - type: url
+    url: https://platform.claude.com/docs/en/home
+    title: "Documentación Oficial de Claude"
+    title_level: 1
+    selector: "main"
+    on_error: skip
+
+  - type: pdf
+    path: libros_draft/claude-reference.pdf
+    title: "Referencia Técnica"
+    title_level: 1
+    on_error: skip

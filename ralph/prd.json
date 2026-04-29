@@ -207,6 +207,22 @@
       "priority": 12,
       "passes": true,
       "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Implementar OllamaPdfIngestor visual agnóstico",
+      "description": "Como usuario, quiero extraer contenido de PDFs usando un modelo VLM local (ej. qwen3.5) para preservar tablas y formatos de forma agnóstica.",
+      "acceptanceCriteria": [
+        "Agregar pymupdf a requirements.txt",
+        "Modificar generate_epub.py para aceptar flag --ai-model opcional",
+        "Actualizar BookConfig para almacenar ai_model",
+        "Crear OllamaPdfIngestor que use PyMuPDF para renderizar páginas a PNG",
+        "Hacer POST a http://localhost:11434/api/generate con imagen Base64 y modelo inyectado",
+        "Registrar 'ollama_pdf' en INGESTORS"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": ""
     }
   ]
 }

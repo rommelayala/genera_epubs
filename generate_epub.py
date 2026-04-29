@@ -29,8 +29,17 @@ def _resolve_input(arg: str) -> Path:
     p = Path(arg)
     if p.is_absolute() and p.exists():
         return p
-    stem = p.stem if p.suffix in INPUT_EXTENSIONS else p.name
-    for ext in INPUT_EXTENSIONS:
+        
+    valid_exts = list(INPUT_EXTENSIONS) + [".yaml"]
+    
+    # Si viene con extensión válida, probar ese archivo exacto primero
+    if p.suffix in valid_exts:
+        direct = _DRAFTS_DIR / p.name
+        if direct.exists():
+            return direct
+            
+    stem = p.stem if p.suffix in valid_exts else p.name
+    for ext in valid_exts:
         candidate = _DRAFTS_DIR / (stem + ext)
         if candidate.exists():
             return candidate
@@ -75,6 +84,7 @@ def _process_book(
     cli_cover: str | None,
     output_format: str,
     no_cache: bool = False,
+    ai_model: str | None = None,
 ) -> None:
     book_log = logging.getLogger(input_path.stem)
     handler = logging.StreamHandler()
@@ -86,6 +96,8 @@ def _process_book(
 
     try:
         config = load_config(input_path)
+        if ai_model:
+            config.ai_model = ai_model
     except ValueError as exc:
         book_log.error("❌ %s", exc)
         raise
@@ -98,6 +110,15 @@ def _process_book(
     out_dir = _OUTPUT_DIR if output_format == "epub" else _AUDIO_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / f"{basename}{ext}"
+    
+    if config.sources:
+        from epub_generator.compiler import compile_book
+        book_log.info("🧩 Compilando %d fuentes...", len(config.sources))
+        try:
+            input_path = compile_book(config, basename)
+        except Exception as e:
+            book_log.error("❌ Falló compilación multi-fuente: %s", e)
+            raise
 
     book_log.info("🔄 Convirtiendo (%s → %s)...", input_path.suffix, output_format)
     generate(input_path, config, cover, output, output_format, no_cache=no_cache)
@@ -122,6 +143,11 @@ def main() -> None:
         dest="no_cache",
         help="Re-narrar todos los capítulos ignorando caché (solo audio)",
     )
+    parser.add_argument(
+        "--ai-model",
+        dest="ai_model",
+        help="Modelo de IA local a usar para ingestores visuales (ej. qwen3.5)",
+    )
     args = parser.parse_args()
 
     if args.book:
@@ -131,17 +157,33 @@ def main() -> None:
             sys.exit(1)
         files = [input_path]
     else:
-        files = []
+        discovered: dict[str, Path] = {}
+        
+        # 1. Buscar YAMLs con sources
+        for f in _DRAFTS_DIR.glob("*.yaml"):
+            try:
+                config = load_config(f)
+                if config.sources:
+                    discovered[f.stem] = f
+            except Exception:
+                pass
+                
+        # 2. Buscar resto de extensiones
         for ext in INPUT_EXTENSIONS:
-            files.extend(_DRAFTS_DIR.glob(f"*{ext}"))
+            for f in _DRAFTS_DIR.glob(f"*{ext}"):
+                if f.stem not in discovered:
+                    discovered[f.stem] = f
+                    
+        files = list(discovered.values())
         if not files:
             log.error("❌ No hay archivos soportados en %s", _DRAFTS_DIR)
             sys.exit(1)
 
     total = len(files)
     md_count = sum(1 for f in files if f.suffix == ".md")
-    pdf_count = total - md_count
-    log.info("📚 Descubiertos %d libros: %d markdown, %d PDF.", total, md_count, pdf_count)
+    pdf_count = sum(1 for f in files if f.suffix == ".pdf")
+    yaml_count = sum(1 for f in files if f.suffix == ".yaml")
+    log.info("📚 Descubiertos %d libros: %d markdown, %d PDF, %d compilados (yaml).", total, md_count, pdf_count, yaml_count)
     log.info("🚀 Procesando en paralelo...\n")
 
     succeeded = 0
@@ -153,6 +195,7 @@ def main() -> None:
                 args.cover if args.book else None,
                 args.output_format,
                 args.no_cache,
+                args.ai_model,
             ): f
             for f in files
         }

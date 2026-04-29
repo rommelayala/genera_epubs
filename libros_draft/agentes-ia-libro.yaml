@@ -6,3 +6,16 @@ date: "2026"
 cover:
   title: "Agentes de IA"
   subtitle: "De la Teoría al Caos"
+
+sources:
+  - type: markdown
+    path: libros_draft/agentes-ia-libro.md
+  - type: html
+    path: libros_draft/agentes-ia-00-prólogo.yaml
+    chapter_num: 00
+  - type: html
+    path: libros_draft/agentes-ia-01-01-introduccion.yaml
+    chapter_num: 01
+  - type: html
+    path: libros_draft/agentes-ia-02-02-arquitectura.yaml
+    chapter_num: 02

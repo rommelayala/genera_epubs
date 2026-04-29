@@ -6,3 +6,7 @@ date: "2026"
 cover:
   title: "Gemini Nano"
   subtitle: "IA on-device desde cero hasta producción"
+
+sources:
+  - type: markdown
+    path: libros_draft/gemini-nano-on-device-ai.md

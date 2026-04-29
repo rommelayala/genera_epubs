@@ -2,7 +2,7 @@
 
 ---
 
-## Prólogo
+# Prólogo
 
 ### Para quién es este libro
 
@@ -89,7 +89,7 @@ Cada flecha representa un paso que ejecutarás con código real. Al final, tiene
 
 ---
 
-## Capítulo 1 — Fundamentos: Qué está pasando realmente
+# Capítulo 1 — Fundamentos: Qué está pasando realmente
 
 ### 1.1 Tres conceptos que parecen iguales (pero no lo son)
 
@@ -105,7 +105,7 @@ La gente usa indistintamente "entrenar", "fine-tunear", "inferir" como si fueran
 
 **Ejemplo:**
 ```bash
-ollama run llama2 "¿Cuál es la capital de Francia?"
+ollama run llama3.2 "¿Cuál es la capital de Francia?"
 ```
 
 El modelo ya existe. Tú lo utilizas. Listo.
@@ -155,7 +155,7 @@ Es como hablarle a tu amigo experto 1,000 veces. Él puede responder mejor cada 
 
 Mediante **entrenamiento**. Y entrenar significa:
 
-1. Mostrarle ejemplos de entrada-salida corrects
+1. Mostrarle ejemplos de entrada-salida correctos
 2. Medir qué tan mal está respondiendo (loss)
 3. Ajustar sus pesos internos (gradientes, backpropagation)
 4. Repetir con el siguiente lote de ejemplos
@@ -188,7 +188,7 @@ Aquí está la pregunta crucial: **¿Cuándo uso cada uno?**
 | **Tiempo de implementación** | Horas | Horas a días | Días a semanas |
 | **GPU necesaria** | Ninguna (solo CPU) | 8+ GB | 12+ GB (para modelo grande) |
 | **¿El modelo ocupa menos espacio?** | No | No | Sí (2-10x más pequeño) |
-| **¿Qué pasa si tus datos cambian?** | Actualiza la DB, listo | Debes reentrenar | Debes redestilizar |
+| **¿Qué pasa si tus datos cambian?** | Actualiza la DB, listo | Debes reentrenar | Debes redestilar |
 | **¿Funciona sin internet?** | Sí (si la DB está local) | Sí | Sí |
 | **Ejemplo de caso de uso** | "Responde preguntas sobre mis 10,000 PDFs" | "Nuestro modelo debe entender nuestra jerga interna" | "Necesito un modelo de 1B que sepa como uno de 70B" |
 
@@ -337,7 +337,7 @@ Aquí están los mejores modelos para fine-tuning y destilación en GPUs de 8–
 
 - **Tamaño:** 7B
 - **VRAM mínima:** 8 GB
-- **¿Por qué?** Muy veloce. Buena precisión. Excelente arquitectura.
+- **¿Por qué?** Muy veloz. Buena precisión. Excelente arquitectura.
 - **Mejor para:** Producción, cuando necesitas velocidad.
 - **Desventaja:** No es tan destilable como Gemma.
 
@@ -435,18 +435,18 @@ Si no ves nada, Ollama no se instaló correctamente. Reinstala.
 
 **Opción A: LLaMA (la estándar)**
 ```bash
-ollama pull llama2
+ollama pull llama3.2
 ```
 
 **Opción B: Hermes (si prefieres instrucciones limpias)**
 ```bash
-ollama pull hermes2-pro
+ollama pull hermes3
 ```
 
 **Opción C: Ambos** (si tienes espacio y quieres comparar)
 ```bash
-ollama pull llama2
-ollama pull hermes2-pro
+ollama pull llama3.2
+ollama pull hermes3
 ```
 
 Esto descarga el modelo. Dependiendo de tu conexión, tomará 5-30 minutos.
@@ -457,12 +457,12 @@ Esto descarga el modelo. Dependiendo de tu conexión, tomará 5-30 minutos.
 
 **Con LLaMA:**
 ```bash
-ollama run llama2 "¿Cuál es la capital de Francia?"
+ollama run llama3.2 "¿Cuál es la capital de Francia?"
 ```
 
 **Con Hermes:**
 ```bash
-ollama run hermes2-pro "¿Cuál es la capital de Francia?"
+ollama run hermes3 "¿Cuál es la capital de Francia?"
 ```
 
 Deberías ver (después de 5-10 segundos):
@@ -505,7 +505,7 @@ nvidia-smi
 #### Paso 2: Verificar que Ollama ve tu GPU
 
 ```bash
-ollama show llama2
+ollama show llama3.2
 ```
 
 Busca una línea que diga `gpu:` o similar. Si ves números, tu GPU está activa.
@@ -517,7 +517,7 @@ Busca una línea que diga `gpu:` o similar. Si ves números, tu GPU está activa
 Ejecuta un modelo pequeño y grande, y mide tiempo:
 
 ```bash
-time ollama run llama2 "Escribe un poema sobre programación"
+time ollama run llama3.2 "Escribe un poema sobre programación"
 ```
 
 Deberías ver:
@@ -581,7 +581,7 @@ Mistral             Velocidad, producción
 Hermes              Instrucciones estructuradas, razonamiento
 ```
 
-### 2.5.5 ¿Necesitas más poder? Estrategias de expansión de hardware
+### 2.6 ¿Necesitas más poder? Estrategias de expansión de hardware
 
 En algún momento te encontrarás con un problema real:
 
@@ -652,7 +652,7 @@ Pros:
 - Gratis (o $10/mes para Colab Pro)
 - GPU K80/T4/A100 disponible
 - Jupyter notebook integrado
-- Idealpara experimentos rápidos
+- Ideal para experimentos rápidos
 
 Contras:
 - Sesión muere después de 12 horas (pro) o 30 minutos sin usar
@@ -785,7 +785,7 @@ Día 4+ (Local, gratis):
 2. **Si necesitas speedup:** Runpod + Colab (híbrido). Costo bajo, no compromiso.
 3. **Si escalas a producción:** Actualiza a RTX 4090 o súbete a un VPS con GPU.
 
-### 2.5.6 Construir un cluster casero: tu plataforma escalable para AIs
+### 2.7 Construir un cluster casero: tu plataforma escalable para AIs
 
 Este es el futuro que la mayoría no ve.
 
@@ -1197,7 +1197,7 @@ Ves:
 
 Ahora sabes qué máquina está ociosa y dónde agregar más poder.
 
-### 2.6 Instalación de dependencias Python para fine-tuning
+### 2.8 Instalación de dependencias Python para fine-tuning
 
 Antes de fine-tunear, necesitas algunas librerías.
 
@@ -1248,7 +1248,7 @@ CUDA available: True
 
 Si `CUDA available: False`, tu GPU no está siendo detectada. Reinstala el driver.
 
-### 2.7 Primer fine-tuning: verificación de "end-to-end"
+### 2.9 Primer fine-tuning: verificación de "end-to-end"
 
 Antes de hacer fine-tuning serio, vamos a hacer uno pequeño, rápido, solo para verificar que todo funciona.
 
@@ -1263,7 +1263,7 @@ from trl import SFTTrainer
 
 # 1. Cargar modelo
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name="unsloth/llama-2-7b",
+    model_name="unsloth/Llama-3.2-3B",
     max_seq_length=512,
     dtype=torch.float16,
     load_in_4bit=True,
@@ -1325,14 +1325,14 @@ python script_test_finetuning.py
 ```
 
 Este script:
-- ✅ Carga Llama 2 (7B)
+- ✅ Carga Llama 3.2 (3B)
 - ✅ Aplica QLoRA
 - ✅ Fine-túnea con 5 ejemplos
 - ✅ Verifica que CUDA funciona
 
-Si ves ✅ al final, todo está correcto. Si ves error, lámoslo, y busca la solución en Capítulo 1.5 "Errores comunes".
+Si ves ✅ al final, todo está correcto. Si ves error, léelo, y busca la solución en la sección 1.5 "Errores que comete el 90% cuando empieza".
 
-### 2.8 Próximo paso
+### 2.10 Próximo paso
 
 Ahora tienes:
 - ✅ Ollama instalado
@@ -1667,7 +1667,7 @@ vectorstore = Chroma.from_documents(
 
 # 5. Configurar modelo LLM
 llm = ChatOllama(
-    model="hermes2-pro",
+    model="hermes3",
     base_url="http://localhost:11434"
 )
 
@@ -2114,7 +2114,7 @@ import json
 print("1️⃣ Cargando modelo...")
 
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name="unsloth/hermes-2-pro-gguf",  # O cualquier modelo: llama, phi, etc.
+    model_name="unsloth/Hermes-3-Llama-3.1-8B",  # O cualquier modelo: llama, phi, etc.
     max_seq_length=2048,
     dtype=torch.float16,
     load_in_4bit=True,  # Cuantización 4 bits
@@ -2275,7 +2275,7 @@ from transformers import AutoModelForCausalLM
 
 # Cargar modelo base
 base_model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-2-7b",  # Modelo base original
+    "meta-llama/Llama-3.2-3B",  # Modelo base original
     torch_dtype=torch.float16,
     device_map="auto"
 )
@@ -2442,8 +2442,8 @@ Aprende no solo QUÉ responder, sino CUÁN SEGURO estar.
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Modelo grande (maestro)
-modelo_maestro = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-70b")
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-70b")
+modelo_maestro = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-70B")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-70B")
 
 # Dataset de preguntas (sin respuestas)
 preguntas = [
@@ -2483,7 +2483,7 @@ from trl import SFTTrainer
 
 # Modelo pequeño (aprendiz)
 modelo_aprendiz, tokenizer = FastLanguageModel.from_pretrained(
-    model_name="unsloth/phi-2-gguf",  # 2.7B parámetros
+    model_name="unsloth/phi-3-mini-4k-instruct",  # 2.7B parámetros
     max_seq_length=2048,
     dtype=torch.float16,
     load_in_4bit=True,
@@ -2570,7 +2570,7 @@ Usa T=5.0 para que el modelo grande sea "menos seguro"
 Esto permite que el modelo pequeño aprenda matices
 ```
 
-### 5.5 Caso real: Destilar LLaMA 70B a Phi 2.7B
+### 5.5 Caso real: Destilar Llama 3.1 70B a Phi 3 Mini
 
 ```python
 # Configuración para destilación inteligente
@@ -2585,7 +2585,7 @@ dataset = generar_respuestas_con_temperatura(
 )
 
 # Paso 2: Entrenar Phi con learning rate bajo
-modelo_phi, _ = FastLanguageModel.from_pretrained("phi-2-7b")
+modelo_phi, _ = FastLanguageModel.from_pretrained("unsloth/phi-3-mini-4k-instruct")
 modelo_phi = FastLanguageModel.get_peft_model(modelo_phi, r=16)
 
 trainer = SFTTrainer(
@@ -2650,12 +2650,179 @@ def evaluar_destilacion(maestro, aprendiz, test_set):
 
 ✅ **Esperado:** 85-95% similitud, 5-10x más rápido
 
-### 5.7 Próximo paso
+### 5.7 Generación de datasets sintéticos a escala
+
+El secreto de una buena destilación es el dataset. No basta con 100 preguntas: necesitas 5,000–20,000 ejemplos diversos.
+
+#### Estrategia 1: Variaciones de una pregunta semilla
+
+```python
+def expandir_preguntas(semillas, modelo_grande, n_variaciones=10):
+    """
+    A partir de N semillas, genera N*n_variaciones reformulaciones.
+    """
+    dataset_expandido = []
+    for semilla in semillas:
+        prompt = (
+            f"Genera {n_variaciones} formas distintas de preguntar lo mismo que: "
+            f"'{semilla}'. Devuelve solo las preguntas, una por línea."
+        )
+        respuesta = modelo_grande(prompt)
+        variaciones = [v.strip("- 1234567890.") for v in respuesta.split("\n") if v.strip()]
+        for v in variaciones[:n_variaciones]:
+            dataset_expandido.append(v)
+    return dataset_expandido
+```
+
+#### Estrategia 2: Destilación cadena-de-pensamiento (CoT)
+
+Pide al maestro que **razone paso a paso**, no solo que responda. El aprendiz copia el razonamiento.
+
+```python
+prompt_cot = """
+Pregunta: {pregunta}
+
+Razona paso a paso antes de responder. Formato:
+PASO 1: ...
+PASO 2: ...
+RESPUESTA FINAL: ...
+"""
+
+respuestas_con_razonamiento = []
+for pregunta in preguntas:
+    respuesta = modelo_maestro(prompt_cot.format(pregunta=pregunta))
+    respuestas_con_razonamiento.append({
+        "pregunta": pregunta,
+        "respuesta_completa": respuesta,
+    })
+```
+
+Resultado: el aprendiz no solo responde, **explica su razonamiento**, lo que mejora drásticamente la calidad.
+
+#### Estrategia 3: Filtrado de calidad automatizado
+
+No todas las respuestas del maestro son buenas. Filtra antes de entrenar:
+
+```python
+def filtrar_dataset(dataset, modelo_evaluador, umbral=0.7):
+    """
+    Pide a un segundo modelo que evalúe cada respuesta del maestro.
+    Solo conserva las que reciben puntuación > umbral.
+    """
+    dataset_limpio = []
+    for item in dataset:
+        prompt_eval = (
+            f"Evalúa esta respuesta de 0 a 1. Solo el número.\n\n"
+            f"Pregunta: {item['pregunta']}\n"
+            f"Respuesta: {item['respuesta']}"
+        )
+        score = float(modelo_evaluador(prompt_eval).strip())
+        if score >= umbral:
+            dataset_limpio.append(item)
+    print(f"Filtrado: {len(dataset)} → {len(dataset_limpio)} ({len(dataset_limpio)/len(dataset):.0%} sobreviven)")
+    return dataset_limpio
+```
+
+### 5.8 Caso real: Destilar Hermes 70B → Hermes 3B
+
+Hermes 3 viene en varios tamaños. La meta: comprimir el de 70B en uno de 3B que sigue capturando su estilo.
+
+```python
+# Paso 1: Maestro
+maestro = AutoModelForCausalLM.from_pretrained(
+    "NousResearch/Hermes-3-Llama-3.1-70B",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    load_in_4bit=True,  # Necesario en GPU de consumo
+)
+
+# Paso 2: Aprendiz
+aprendiz, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="unsloth/Llama-3.2-3B",
+    max_seq_length=2048,
+    load_in_4bit=True,
+)
+
+aprendiz = FastLanguageModel.get_peft_model(
+    aprendiz,
+    r=32,            # Rank más alto = más capacidad de absorber
+    lora_alpha=64,
+    lora_dropout=0.05,
+)
+
+# Paso 3: Generar dataset (5000 ejemplos con CoT)
+dataset = generar_dataset_cot(
+    maestro=maestro,
+    semillas=cargar_semillas("preguntas_dominio.json"),
+    n_variaciones=10,
+    temperatura=4.0,  # Soft labels
+)
+
+dataset = filtrar_dataset(dataset, modelo_evaluador=maestro, umbral=0.75)
+
+# Paso 4: Entrenar
+trainer = SFTTrainer(
+    model=aprendiz,
+    tokenizer=tokenizer,
+    train_dataset=dataset,
+    args=TrainingArguments(
+        output_dir="./hermes_3b_destilado",
+        num_train_epochs=8,
+        per_device_train_batch_size=2,
+        gradient_accumulation_steps=4,
+        learning_rate=2e-4,
+        warmup_steps=100,
+        logging_steps=20,
+        save_steps=200,
+        fp16=True,
+    ),
+)
+
+trainer.train()
+trainer.save_model("./hermes_3b_destilado_final")
+```
+
+**Resultado típico** (en RTX 4090):
+- Tiempo de entrenamiento: 6–10 horas
+- Similitud con maestro: 87–92%
+- Speedup en inferencia: 12–18x
+- VRAM en producción: 2.5 GB (vs 40 GB del maestro cuantizado)
+
+### 5.9 Errores comunes en destilación
+
+#### Error 1: El aprendiz copia palabra por palabra (overfitting)
+
+**Síntoma:** Respuestas idénticas al maestro, pero falla con cualquier reformulación.
+
+**Solución:**
+- Aumenta `lora_dropout` a 0.1
+- Reduce `num_train_epochs`
+- Aumenta diversidad del dataset (más reformulaciones)
+
+#### Error 2: El aprendiz no converge
+
+**Síntoma:** Loss se queda alta y oscilando.
+
+**Solución:**
+- Reduce `learning_rate` (prueba 5e-5)
+- Verifica que el dataset tenga buen formato (sin tokens especiales rotos)
+- Aumenta `r` de LoRA (más capacidad)
+
+#### Error 3: El aprendiz alucina más que el maestro
+
+**Causa:** El dataset tiene respuestas inventadas del maestro que el aprendiz aprende como verdad.
+
+**Solución:**
+- Filtra el dataset con un segundo modelo
+- Añade ejemplos negativos: "no sé" cuando no haya información
+
+### 5.10 Próximo paso
 
 Destilación es Fase 3. Ahora tienes:
 - Modelo pequeño
 - Rápido
 - Inteligente (aprendió del grande)
+- Datasets sintéticos generados con CoT y filtrado
 
 **Pero:** Cada modelo sigue siendo especialista en su dominio.
 
@@ -3022,11 +3189,11 @@ DARE          Alta          Fusión experta          Máxima calidad
 ```yaml
 # config_fusión_phi_hermes.yaml
 models:
-  - model: unsloth/phi-2-gguf
+  - model: unsloth/phi-3-mini-4k-instruct
     parameters:
       weight: 0.6
       alpha: 0.5
-  - model: NousResearch/Hermes-2-Pro
+  - model: NousResearch/Hermes-3-Llama-3.1-8B
     parameters:
       weight: 0.4
       alpha: 0.5
@@ -3067,13 +3234,175 @@ def evaluar_fusión(modelo_a, modelo_b, modelo_fusionado, test_set):
         print(f"Mejora vs A: {mejora_a}, vs B: {mejora_b}")
 ```
 
-### 7.7 Próximo paso
+### 7.7 Métodos avanzados: TIES y DARE
+
+Cuando los modelos a fusionar son muy diferentes (por ejemplo, uno fine-tuneado en código y otro en español literario), el promedio simple destruye conocimiento. Para esos casos, existen métodos más inteligentes.
+
+#### TIES (TrIm, Elect Sign, & Merge)
+
+TIES funciona en tres pasos:
+
+1. **Trim:** Elimina parámetros poco significativos (ruido).
+2. **Elect Sign:** Si dos modelos discrepan en la dirección de un peso, gana el de mayor magnitud.
+3. **Merge:** Promedia solo los pesos que sobrevivieron.
+
+```yaml
+# config_ties.yaml
+models:
+  - model: NousResearch/Hermes-3-Llama-3.1-8B
+    parameters:
+      density: 0.5    # Conserva el 50% más relevante
+      weight: 0.6
+  - model: meta-llama/CodeLlama-7b
+    parameters:
+      density: 0.5
+      weight: 0.4
+
+merge_method: ties
+base_model: meta-llama/Llama-3.1-8B
+dtype: float16
+```
+
+#### DARE (Drop And REscale)
+
+DARE es similar a TIES pero "deja caer" pesos al azar y reescala los demás. Resultado: fusiones más limpias, menos colisiones.
+
+```yaml
+# config_dare.yaml
+models:
+  - model: NousResearch/Hermes-3-Llama-3.1-8B
+    parameters:
+      density: 0.7
+      weight: 0.5
+  - model: meta-llama/CodeLlama-7b
+    parameters:
+      density: 0.7
+      weight: 0.5
+
+merge_method: dare_ties
+base_model: meta-llama/Llama-3.1-8B
+dtype: float16
+```
+
+**Regla práctica:**
+- Modelos similares (mismo base, diferente fine-tune) → `linear` o `slerp`
+- Modelos diferentes (mismas dimensiones, distinto entrenamiento) → `ties` o `dare_ties`
+
+### 7.8 Errores comunes en fusión
+
+#### Error 1: "Tensor shape mismatch"
+
+```
+RuntimeError: Tensor shape mismatch: model A has [4096, 4096], model B has [5120, 5120]
+```
+
+**Causa:** Los modelos tienen arquitecturas distintas (Llama 7B vs Llama 13B).
+
+**Solución:** Solo se pueden fusionar modelos del MISMO tamaño y arquitectura. Verifica con:
+
+```bash
+python -c "from transformers import AutoConfig; print(AutoConfig.from_pretrained('modelo_a'))"
+python -c "from transformers import AutoConfig; print(AutoConfig.from_pretrained('modelo_b'))"
+```
+
+#### Error 2: "El modelo fusionado responde mal"
+
+**Síntomas:**
+- Respuestas incoherentes
+- Mezcla idiomas sin sentido
+- Olvida una de las habilidades
+
+**Soluciones (en orden):**
+
+1. Reduce los pesos al promedio (`0.5/0.5`).
+2. Cambia de `linear` a `slerp`.
+3. Si persiste, usa `ties` con `density: 0.5`.
+4. Si nada funciona, los modelos son incompatibles. Vuelve a fine-tunear desde el mismo base.
+
+#### Error 3: "Out of memory" al fusionar
+
+```
+torch.cuda.OutOfMemoryError: CUDA out of memory
+```
+
+**Causa:** mergekit carga ambos modelos en VRAM por defecto.
+
+**Solución:** Usa `--cuda` solo si tienes GPU grande. En GPU de 8-16 GB, fusiona en CPU:
+
+```bash
+mergekit-cli merge config_fusion.yaml ./output --copy-tokenizer --allow-crimes
+```
+
+(`--allow-crimes` permite operaciones costosas pero más conservadoras de memoria.)
+
+### 7.9 Cuantizar el modelo fusionado para Ollama
+
+Después de fusionar, querrás usarlo con Ollama. El paso clave es cuantizar a GGUF:
+
+```bash
+# 1. Instalar llama.cpp
+git clone https://github.com/ggerganov/llama.cpp
+cd llama.cpp && make
+
+# 2. Convertir a GGUF F16
+python convert.py ../phi_hermes_fusionado --outtype f16 --outfile fusion.f16.gguf
+
+# 3. Cuantizar a Q4_K_M (balance calidad/tamaño)
+./quantize fusion.f16.gguf fusion.Q4_K_M.gguf Q4_K_M
+
+# 4. Crear Modelfile para Ollama
+cat > Modelfile <<EOF
+FROM ./fusion.Q4_K_M.gguf
+TEMPLATE """{{ .Prompt }}"""
+PARAMETER temperature 0.7
+PARAMETER num_ctx 4096
+EOF
+
+# 5. Importar en Ollama
+ollama create mi-fusion -f Modelfile
+ollama run mi-fusion "Escribe una función Python que calcule fibonacci"
+```
+
+### 7.10 Caso real: Modelo bilingüe técnico
+
+**Objetivo:** un modelo que entienda código (CodeLlama) y responda en español natural (Hermes 3).
+
+```yaml
+# config_bilingue_tecnico.yaml
+models:
+  - model: NousResearch/Hermes-3-Llama-3.1-8B
+    parameters:
+      density: 0.6
+      weight: 0.55
+  - model: meta-llama/CodeLlama-7b-Instruct-hf
+    parameters:
+      density: 0.6
+      weight: 0.45
+
+merge_method: dare_ties
+base_model: meta-llama/Llama-3.1-8B
+dtype: float16
+parameters:
+  normalize: true
+  int8_mask: true
+```
+
+Pruebas esperadas:
+
+| Pregunta | Modelo CodeLlama solo | Modelo Hermes solo | Modelo fusionado |
+|---|---|---|---|
+| "Explica recursión en español" | Mezcla idiomas | Bien, pero sin código | Bien + código |
+| "Refactoriza este Python" | Bien | Texto genérico | Bien |
+| "Cuéntame un cuento" | Mediocre | Bien | Bien |
+
+### 7.11 Próximo paso
 
 Ahora tienes:
 - ✅ Modelos fine-tuneados
 - ✅ Modelos destilados
 - ✅ Sistemas multi-agente
-- ✅ Modelos fusionados
+- ✅ Modelos fusionados (con TIES, DARE, slerp)
+- ✅ Modelos fusionados cuantizados para Ollama
 
 **Próximo:** Automatizar todo (Capítulo 8)
 
@@ -3484,7 +3813,7 @@ class Pregunta(BaseModel):
     usuario_id: str
 
 # Modelo LLM
-llm = ChatOllama(model="hermes2-pro", base_url="http://localhost:11434")
+llm = ChatOllama(model="hermes3", base_url="http://localhost:11434")
 
 # Vector store (RAG)
 vectorstore = Chroma(persist_directory="./chroma_db")
@@ -3823,64 +4152,177 @@ Una vez el sistema corra:
 
 # Apéndices
 
-## Apéndice A: Comandos Essenciales de Ollama
+## Apéndice A: Comandos Esenciales de Ollama
 
 ```bash
-# Ver modelos descargados
-ollama list
+# === Gestión de modelos ===
+ollama list                       # Modelos descargados
+ollama pull llama3.2              # Descargar
+ollama pull hermes3               # Descargar Hermes 3
+ollama rm nombre_modelo           # Eliminar
+ollama show llama3.2              # Ver metadatos del modelo
+ollama cp llama3.2 mi-llama       # Clonar (para Modelfile custom)
 
-# Descargar modelo
-ollama pull nombre_modelo
+# === Inferencia ===
+ollama run llama3.2                              # Modo interactivo
+ollama run llama3.2 "Pregunta puntual"           # Una sola consulta
+ollama run llama3.2 --verbose                    # Ver tokens/segundo
 
-# Eliminar modelo
-ollama rm nombre_modelo
+# === Servicio ===
+ollama serve                      # Arrancar servidor (suele auto-arrancar)
+pkill -f ollama                   # Parar el servicio
 
-# Ejecutar modelo interactivo
-ollama run modelo
+# === Logs (macOS) ===
+tail -f ~/.ollama/logs/server.log
 
-# Ver logs
-ollama logs
+# === Logs (Linux con systemd) ===
+journalctl -u ollama -f
 
-# Parar servicio
-pkill -f ollama
+# === Importar GGUF custom ===
+cat > Modelfile <<EOF
+FROM ./mi-modelo.Q4_K_M.gguf
+PARAMETER temperature 0.7
+PARAMETER num_ctx 4096
+EOF
+ollama create mi-modelo -f Modelfile
+
+# === API HTTP ===
+curl http://localhost:11434/api/generate -d '{
+  "model": "llama3.2",
+  "prompt": "Hola",
+  "stream": false
+}'
 ```
 
 ## Apéndice B: Errores Frecuentes y Soluciones
 
-```
-Error: CUDA out of memory
-Solución: Reduce batch_size o max_seq_length
+### GPU / Memoria
 
-Error: Model not found
-Solución: ollama pull model_name
+| Error | Causa | Solución |
+|---|---|---|
+| `CUDA out of memory` | VRAM insuficiente | Reduce `batch_size`, `max_seq_length`, o usa `load_in_4bit=True` |
+| `RuntimeError: NCCL error` | Múltiples GPUs mal configuradas | `export CUDA_VISIBLE_DEVICES=0` |
+| `torch.cuda.is_available()` devuelve `False` | Drivers/CUDA mal instalados | Reinstala drivers NVIDIA + `pip install torch --index-url https://download.pytorch.org/whl/cu121` |
+| `MPS backend out of memory` (Mac) | Memoria unificada saturada | `export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0` |
 
-Error: Ray connection refused
-Solución: Verifica que Ray está corriendo. ray status
+### Ollama
 
-Error: Dataset format invalid
-Solución: Valida JSON con: python -m json.tool dataset.json
-```
+| Error | Causa | Solución |
+|---|---|---|
+| `connection refused` | Servicio no corriendo | `ollama serve` en otra terminal |
+| `model not found` | Modelo no descargado | `ollama pull <nombre>` |
+| Respuestas truncadas | `num_ctx` bajo | Aumenta en Modelfile: `PARAMETER num_ctx 8192` |
+| Timeout en peticiones largas | Cliente impaciente | Aumenta `timeout` en tu código (300s+) |
 
-## Apéndice C: Fuentes de Modelos
+### Ray / Cluster
 
-- **Hugging Face:** https://huggingface.co/models
-- **Ollama Library:** https://ollama.ai/library
-- **Replicate:** https://replicate.com/models
+| Error | Causa | Solución |
+|---|---|---|
+| `ray connection refused` | Head node caído | `ray status` y, si nada, `ray start --head` |
+| Workers no se conectan | Firewall | Abre puertos 6379, 8265, 10001-10010 |
+| `actors keep dying` | OOM en worker | Reduce `num_gpus` por actor o el batch |
 
-## Apéndice D: Glosario
+### Hugging Face / Datasets
 
-- **Embedding:** Vector numérico que representa significado
-- **Fine-tuning:** Reentrenamiento con datos nuevos
-- **Destilación:** Transferencia de conocimiento modelo grande a pequeño
-- **LoRA:** Adaptadores pequeños para fine-tuning eficiente
-- **VRAM:** Memoria de la GPU
-- **RAG:** Recuperación aumentada por generación
-- **Cluster:** Múltiples máquinas conectadas
+| Error | Causa | Solución |
+|---|---|---|
+| `401 Unauthorized` en `from_pretrained` | Modelo gated (Llama, Gemma) | `huggingface-cli login` y aceptar términos en la web |
+| `dataset format invalid` | JSON mal formado | `python -m json.tool dataset.json` |
+| Tokenizer no encuentra `pad_token` | Modelo sin token de padding | `tokenizer.pad_token = tokenizer.eos_token` |
+
+### QLoRA / Fine-tuning
+
+| Error | Causa | Solución |
+|---|---|---|
+| Loss se queda en `nan` | Learning rate demasiado alto | Reduce a `1e-4` o `5e-5` |
+| Loss no baja | Dataset muy pequeño o mal formato | Verifica formato y usa al menos 100 ejemplos |
+| Modelo final no responde como esperabas | Pocas épocas o LoRA `r` bajo | Sube a 3-5 épocas y `r=16` o `r=32` |
+
+## Apéndice C: Fuentes de Modelos y Datasets
+
+### Modelos
+
+- **Hugging Face Hub:** https://huggingface.co/models — el catálogo principal
+- **Ollama Library:** https://ollama.com/library — modelos listos para Ollama
+- **NousResearch (Hermes):** https://huggingface.co/NousResearch — la familia Hermes
+- **unsloth (versiones optimizadas):** https://huggingface.co/unsloth — modelos preparados para QLoRA
+- **Replicate:** https://replicate.com/models — modelos hosteados
+- **TheBloke (GGUF cuantizados, archivo histórico):** https://huggingface.co/TheBloke
+
+### Datasets para fine-tuning
+
+- **OpenAssistant/oasst1:** conversaciones humanas multi-idioma
+- **databricks/databricks-dolly-15k:** instrucciones generales
+- **OpenOrca:** dataset masivo derivado de GPT-4
+- **HuggingFaceH4/ultrachat_200k:** chats multi-turno
+- **glaiveai/glaive-function-calling-v2:** function calling
+
+### Benchmarks
+
+- **lm-eval-harness:** https://github.com/EleutherAI/lm-evaluation-harness
+- **HELM:** https://crfm.stanford.edu/helm/
+- **Open LLM Leaderboard:** https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard
+
+## Apéndice D: Glosario Extendido
+
+**Embedding** — Vector numérico (típicamente de 384 a 4096 dimensiones) que representa el significado de un texto. Textos similares tienen embeddings cercanos en el espacio vectorial.
+
+**Fine-tuning** — Reentrenamiento de un modelo preentrenado con datos nuevos para adaptarlo a un dominio o tarea específica.
+
+**QLoRA** — Quantized Low-Rank Adaptation. Técnica que permite fine-tunear modelos grandes en GPU de consumo cuantizando los pesos a 4 bits y entrenando solo adaptadores pequeños.
+
+**LoRA** — Low-Rank Adaptation. Inserta matrices pequeñas (`r` filas) en las capas del modelo y solo entrena esas matrices, dejando los pesos originales intactos.
+
+**Destilación** — Transferencia de conocimiento de un modelo grande (maestro) a uno pequeño (aprendiz) mediante imitación de su distribución de salida.
+
+**RAG** — Retrieval-Augmented Generation. El modelo busca información relevante en una base de datos externa antes de responder, sin necesidad de reentrenarse.
+
+**VRAM** — Video RAM. Memoria dedicada de la GPU, donde viven los pesos del modelo durante inferencia y entrenamiento.
+
+**Cuantización** — Reducir la precisión numérica de los pesos (de FP16 a INT8 o INT4) para que ocupen menos memoria, sacrificando un poco de precisión.
+
+**GGUF** — Formato binario optimizado para inferencia eficiente en CPU/GPU de consumo, usado por llama.cpp y Ollama.
+
+**Logits** — Salidas del modelo antes de aplicar softmax. Contienen más información que las probabilidades finales y son clave en destilación.
+
+**Soft labels** — Distribución de probabilidad sobre todas las opciones, en lugar de una respuesta única. Permiten transferir matices al aprendiz.
+
+**Temperatura** — Parámetro que controla la aleatoriedad del modelo. Baja (0.1) = determinista; alta (1.5+) = creativo.
+
+**Top-k / Top-p** — Estrategias de muestreo. Top-k considera solo las `k` opciones más probables; top-p considera las que sumen hasta `p` de probabilidad acumulada.
+
+**Cluster** — Conjunto de máquinas conectadas por red que comparten carga de trabajo (ej. entrenamiento distribuido con Ray).
+
+**MCP (Model Context Protocol)** — Protocolo abierto para que múltiples modelos compartan contexto y herramientas.
+
+**Multi-agente** — Sistema donde varios modelos especializados colaboran, cada uno con un rol distinto (planificador, ejecutor, evaluador).
+
+**Mergekit** — Herramienta para fusionar pesos de varios modelos en uno solo.
+
+**Slerp** — Spherical Linear Interpolation. Método de fusión que preserva mejor la geometría del espacio de pesos.
+
+**TIES / DARE** — Métodos avanzados de fusión que recortan ruido y resuelven conflictos entre modelos.
+
+## Apéndice E: Checklist final del libro
+
+Si has completado todo el libro, deberías tener:
+
+- [ ] Ollama instalado y corriendo localmente
+- [ ] Al menos un modelo base descargado (Llama 3.2 o Hermes 3)
+- [ ] Entorno Python con `unsloth`, `transformers`, `peft`, `trl` funcionando
+- [ ] Una base RAG con tus documentos indexados
+- [ ] Un modelo fine-tuneado con QLoRA en tu dominio
+- [ ] Un modelo destilado (versión ligera) en producción
+- [ ] Un sistema multi-agente con al menos 2 roles colaborando
+- [ ] Un modelo fusionado con mergekit
+- [ ] Ciclo automatizado (APScheduler/cron) corriendo semanalmente
+- [ ] Cluster local con Ray (head + al menos 1 worker)
+- [ ] Métricas registradas y dashboard funcionando
+
+Si tienes los 11 puntos: enhorabuena, tienes una IA local autónoma corriendo en tu casa.
 
 ---
 
 **FIN DEL LIBRO**
 
 Ahora tienes todo. Desde configuración básica hasta un sistema autónomo completo que mejora cada semana.
-
-¿Preguntas? ¿Necesitas expandir alguna sección?

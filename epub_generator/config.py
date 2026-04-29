@@ -18,6 +18,7 @@ class SourceConfig:
     title: str = ""
     title_level: int = 1
     on_error: str = "skip"
+    model: str = ""
 
 
 @dataclass
@@ -53,6 +54,7 @@ class BookConfig:
     description: str = ""
     language: str = "es-ES"
     date: str = ""
+    ai_model: str = ""
     cover: CoverConfig = field(default_factory=CoverConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     sources: List[SourceConfig] = field(default_factory=list)
@@ -104,12 +106,16 @@ def _build_sources(data: list) -> List[SourceConfig]:
             title=item.get("title", defaults.title),
             title_level=item.get("title_level", defaults.title_level),
             on_error=item.get("on_error", defaults.on_error),
+            model=item.get("model", defaults.model),
         ))
     return result
 
 
 def load_config(input_path: Path) -> BookConfig:
-    yaml_path = input_path.parent / (input_path.stem + ".yaml")
+    if input_path.suffix.lower() == ".yaml":
+        yaml_path = input_path
+    else:
+        yaml_path = input_path.parent / (input_path.stem + ".yaml")
 
     if not yaml_path.exists():
         return BookConfig()
@@ -133,6 +139,7 @@ def load_config(input_path: Path) -> BookConfig:
         description=data.get("description", defaults.description),
         language=data.get("language", defaults.language),
         date=data.get("date", defaults.date),
+        ai_model=data.get("ai_model", defaults.ai_model),
         cover=_build_cover(cover_data),
         audio=_build_audio(audio_data),
         sources=_build_sources(sources_data),

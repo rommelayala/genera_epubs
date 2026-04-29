@@ -46,9 +46,9 @@ def test_valid_sources_pass_validation(tmp_path: Path) -> None:
     config = BookConfig(
         sources=[SourceConfig(type="markdown", path=str(md_file))]
     )
-    # Validation passes; NotImplementedError expected since US-006 not yet done
-    with pytest.raises(NotImplementedError):
-        compile_book(config, "test", project_root=tmp_path)
+    # Validation passes - compile_book() now supports markdown
+    result = compile_book(config, "test", project_root=tmp_path)
+    assert result is not None
 
 
 def test_error_message_includes_index(tmp_path: Path) -> None:

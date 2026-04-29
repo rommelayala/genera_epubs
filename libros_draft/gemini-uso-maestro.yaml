@@ -6,3 +6,7 @@ date: "2026"
 cover:
   title: "Gemini Uso Maestro"
   subtitle: "De Usuario Casual a Operador de Élite"
+
+sources:
+  - type: markdown
+    path: libros_draft/gemini-uso-maestro.md

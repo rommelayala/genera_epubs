@@ -24,6 +24,7 @@ Para que cualquier herramienta de IA (Claude, Gemini, Cursor, Windsurf, etc.) pu
 - `.claude/commands/`: Comandos personalizados (ej. `/genera-ebook`) para operar localmente el loop.
 - `libros_draft/` y `portadas_draft/`: Contenido crudo de entrada.
 - `epubs_generados/` y `audios_generados/`: Artefactos de salida final (libros M4B y EPUBs).
+- `memory/`: Registro histórico y estados de las User Stories para agentes de IA.
 
 ---
 
@@ -46,6 +47,7 @@ load_config(path) → BookConfig
 - **BookConfig** — Metadatos del libro (title, author, description, language, date)
 - **CoverConfig** — Diseño de portada (colores, tamaños, fuentes, imagen)
 - **AudioConfig** — Parámetros de TTS (voz, rate, volume, pitch, bitrate, pausas, caché, intro/outro)
+- **SourceConfig** — Configuración de fuentes individuales (type, path, url, model, title_level)
 
 **Decisión de diseño:** Usar dataclasses + defaults en lugar de diccionarios, para:
 - Type hints y verificación estática
@@ -157,7 +159,42 @@ audiolibro.m4b (con chapter markers, portada)
 
 ---
 
-### 3. Capa de Preprocesamiento (`preprocessors/`)
+### 3. Capa de Ingestores (`ingestors/`)
+
+**Responsabilidad:** Extraer y normalizar contenido desde fuentes externas a Markdown.
+
+| Módulo | Tipo YAML | Descripción |
+|---|---|---|
+| `base.py` | — | Contrato `BaseIngestor`. Todos los ingestores lo heredan. Soporta inyección de `BookConfig` (`ai_model`, etc.) |
+| `markdown_ingestor.py` | `markdown` | Lee archivo `.md` directamente. Ingestor más simple. |
+| `ollama_pdf_ingestor.py` | `ollama_pdf` | VLM visual: renderiza cada página del PDF como PNG vía PyMuPDF y la envía a Ollama. Produce Markdown con tablas y código real. Incluye reintentos con backoff exponencial (1s/2s/4s). |
+| `pdf_ingestor.py` | `pdf` | Extrae texto plano de PDF con capa de texto (PyMuPDF, sin IA). |
+| `url_ingestor.py` | `url` | Web scraping con `requests` + `BeautifulSoup4` + `markdownify`. Convierte imágenes en texto para evitar errores en el EPUB. |
+| `html_ingestor.py` | `html` | Archivo HTML local → Markdown. Misma lógica que `url_ingestor`. |
+| `text_ingestor.py` | `text` | Archivo `.txt` plano → Markdown (wrapea en párrafo). |
+| `word_ingestor.py` | `word` | Archivo `.docx` → Markdown (python-docx). |
+| `epub_ingestor.py` | `epub` | Recompila un EPUB existente extrayendo su HTML interno (ebooklib). |
+| `ncx_ingestor.py` | `ncx` | Lee el índice NCX de un EPUB (metadatos de capítulos). |
+| `opf_ingestor.py` | `opf` | Lee el manifiesto OPF de un EPUB (metadatos del libro). |
+
+**Parámetros comunes en SourceConfig:**
+- `on_error: skip` — ante fallo, omite la fuente y sigue (en lugar de abortar)
+- `title` / `title_level` — inyecta una cabecera `#`/`##` antes del contenido
+- `model` — modelo Ollama a usar para `ollama_pdf` (se puede sobreescribir con `--ai-model`)
+
+---
+
+### 4. Capa de Compilación (`compiler.py`)
+
+**Responsabilidad:** Orquestar la unión de múltiples fuentes en un archivo maestro.
+
+**Flujo de Compilación:**
+1. **Validación:** Comprueba que todos los archivos locales y URLs sean accesibles.
+2. **Ciclo de Ingestión:** Itera sobre `config.sources` y llama al ingestor correspondiente.
+3. **Inyección de Jerarquía:** Inserta cabeceras `#` o `##` dinámicamente según el `title_level` de cada fuente.
+4. **Master Markdown:** Escribe el resultado final en `libros_draft/{basename}_compiled.md`.
+
+### 5. Capa de Preprocesamiento (`preprocessors/`)
 
 **Responsabilidad:** Preparar contenido para diferentes formatos (EPUB vs. TTS).
 
@@ -181,7 +218,7 @@ audiolibro.m4b (con chapter markers, portada)
 
 ---
 
-### 4. Capa de Portadas (`cover.py`)
+### 6. Capa de Portadas (`cover.py`)
 
 **Responsabilidad:** Generar portadas profesionales con Pillow.
 
@@ -208,7 +245,7 @@ generate_cover(basename, config, output_dir)
 
 ---
 
-### 5. Capa de Orquestación (`generate_epub.py`)
+### 7. Capa de Orquestación (`generate_epub.py`)
 
 **Responsabilidad:** CLI, descubrimiento de libros, paralelismo.
 
@@ -243,7 +280,7 @@ Así en paralelismo, logs de diferentes libros no se mezclan.
 
 ---
 
-### 6. Dispatcher (`generator.py`)
+### 8. Dispatcher (`generator.py`)
 
 **Responsabilidad:** Rutear a converter correcto según (extensión, formato).
 
@@ -471,11 +508,15 @@ subprocess.run(["ffmpeg", ..., str(cover_path.resolve())])  # absoluto
 
 ## Roadmap Técnico
 
+- [x] Soporte para múltiples fuentes (Markdown + PDF + URL + HTML + Word + EPUB)
+- [x] Ingestor de PDF con IA Visual (Ollama + VLM) con reintentos y backoff
+- [x] Flag CLI `--ai-model` para cambio dinámico de modelo de IA
+- [x] Ingestor EPUB (re-compilar libros existentes con ebooklib)
+- [x] Ingestores Word, HTML, texto plano, NCX, OPF
 - [ ] Caché de portadas (re-generar solo si config cambió)
 - [ ] Validación EPUB con EPUBCheck
 - [ ] Soporte para .rst, .asciidoc
 - [ ] Webhook para CI/CD (auto-generar en push)
 - [ ] API REST (generar libros bajo demanda)
 - [ ] Interfaz web (upload, generar, descargar)
-- [ ] Soporte para múltiples voces en audio (dialogos)
-- [ ] OCR para PDFs escaneados (Tesseract)
+- [ ] Soporte para múltiples voces en audio (diálogos)

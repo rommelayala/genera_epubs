@@ -1,10 +1,12 @@
-# Git y SSH: Configuración y Resolución de Problemas
+# Git Uso Maestro — De Usuario Principiante a Casi experto
 
-## Configuración y Diagnóstico de SSH
+## Git y SSH: Configuración y Resolución de Problemas
+
+### Configuración y Diagnóstico de SSH
 
 Cuando trabajas con repositorios remotos en GitHub y utilizas claves SSH, es fundamental saber cómo diagnosticar problemas de conexión. Aquí tienes los comandos más útiles:
 
-### 1. Ver la configuración de SSH
+#### 1. Ver la configuración de SSH
 
 Estos comandos te ayudan a ver cómo se está conectando tu computadora a internet y a GitHub.
 

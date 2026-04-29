@@ -77,6 +77,18 @@ audio:
   concurrency: 5                        # Capítulos en paralelo
   intro: true                           # "Este es el audiolibro..."
   outro: true                           # "Fin del audiolibro..."
+
+### Fuentes Multi-Fuente (Compilación)
+
+```yaml
+sources:
+  - type: markdown            # Tipos: markdown, pdf, ollama_pdf, url
+    path: "archivo.md"
+  - type: ollama_pdf          # Ingestión visual con IA (Ollama)
+    path: "mi-nota.pdf"
+    model: "qwen3.5"          # Modelo IA local (opcional)
+    title_level: 1            # H1, H2, etc. en el master
+```
 ```
 
 ---
@@ -195,7 +207,12 @@ epub_generator/
 │   ├── markdown.py         # MD → EPUB (pandoc)
 │   ├── pdf.py              # PDF → EPUB (ebook-convert)
 │   └── audio.py            # MD → M4B (edge-tts + ffmpeg)
-└── preprocessors/
+├── ingestors/              # [NUEVO] Extracción de contenido
+│   ├── base.py             # Clase base abstracta
+│   ├── markdown_ingestor.py
+│   ├── ollama_pdf_ingestor.py # VLM Vision OCR
+│   └── url_ingestor.py     # Scraper de URLs
+├── preprocessors/
     └── markdown_cleaner.py # Limpieza de texto para TTS
 ```
 

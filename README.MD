@@ -4,7 +4,7 @@ Convierte archivos Markdown (`.md`) y PDF (`.pdf`) a **EPUB** con portadas autom
 metadata configurable por libro vía YAML, procesamiento en paralelo y generación de **audiolibros M4B**
 con chapter markers navegables, portada embebida e intro/outro narrados.
 
-**Versión:** 2.0 | **Última actualización:** 2026-04-24
+**Versión:** 2.1 | **Última actualización:** 2026-04-29
 
 ---
 
@@ -18,18 +18,36 @@ con chapter markers navegables, portada embebida e intro/outro narrados.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — Reglas para contribuidores, pull requests y desarrollo
 - **[AGENTS.md](AGENTS.md)** — Reglas OBLIGATORIAS para IAs sobre generación y estilo
 
-
 ---
 
 ## Precondiciones
 
-| Herramienta | Para qué | Instalar |
-|---|---|---|
-| **Python 3** | motor principal | preinstalado en macOS/Linux |
-| **Pandoc** | convertir `.md` → EPUB | `brew install pandoc` / `sudo apt install pandoc` |
+| Herramienta                   | Para qué                                   | Instalar                                                   |
+| ----------------------------- | ------------------------------------------ | ---------------------------------------------------------- |
+| **Python 3**                  | motor principal                            | preinstalado en macOS/Linux                                |
+| **Pandoc**                    | convertir `.md` → EPUB                     | `brew install pandoc` / `sudo apt install pandoc`          |
 | **Calibre** (`ebook-convert`) | convertir `.pdf` → EPUB (solo si hay PDFs) | `brew install --cask calibre` / `sudo apt install calibre` |
+| **Ollama**                    | OCR de PDFs                                | `brew install --cask ollama`                               |
+| **Qwen2.5** (o qwen2.5-vl)    | OCR de PDFs con visión                    | `ollama pull qwen2.5-vl`                                   |
+| **Llama3.2-Vision**           | OCR de PDFs                                | `ollama pull llama3.2-vision`                              |
 
 El launcher crea el venv y descarga las fuentes Inter automáticamente en el primer arranque.
+
+**Verificar que Ollama está corriendo:**
+
+```bash
+ollama list                          # Lista modelos descargados
+curl http://localhost:11434/api/version  # Comprueba que el servidor responde
+```
+
+**Si Ollama no responde:**
+
+```bash
+brew services restart ollama         # Reiniciar vía Homebrew
+# o manualmente:
+killall ollama
+/Applications/Ollama.app/Contents/MacOS/ollama serve
+```
 
 ---
 
@@ -45,7 +63,7 @@ genera_epubs/
 │   ├── context.md            ← Identidad, prioridades y filosofía de trabajo de Rommel
 │   ├── architecture.md       ← Diseño del sistema y flujos de arquitectura
 │   └── tasks/                ← Tareas pendientes y planes de implementación a futuro
-├── .claude/commands/         ← Skills personalizadas para la app desktop de Claude 
+├── .claude/commands/         ← Skills personalizadas para la app desktop de Claude
 ├── libros_draft/             ← Fuentes (input): archivos .md, .pdf y YAML sidecar
 ├── portadas_draft/           ← Diseño: portadas estáticas manuales o autogeneradas
 ├── epubs_generados/          ← Salida (output): EPUBs finales compilados
@@ -70,6 +88,9 @@ genera_epubs/
 
 # Libro específico con portada manual
 ./generate_epub.sh agentes-ia-libro.md mi_portada.jpg
+
+# Sobrescribir el modelo de IA local para extracción visual de PDFs
+./generate_epub.sh git-libro.yaml --ai-model llama3.2-vision
 ```
 
 ---
@@ -87,8 +108,8 @@ description: "Descripción opcional"
 language: "es-ES"
 date: "2026"
 cover:
-  title: "Título del Libro"   # texto principal de la portada
-  subtitle: "Subtítulo"       # línea secundaria (opcional)
+  title: "Título del Libro" # texto principal de la portada
+  subtitle: "Subtítulo" # línea secundaria (opcional)
   bg_color: "#151515"
   text_color: "#EAEAEA"
   accent_color: "#4A4A4A"
@@ -109,6 +130,61 @@ cover:
 
 ---
 
+## Compilador Multi-Fuente e Integración Visual (Ollama)
+
+El sistema ahora soporta compilación multi-fuente. En tu YAML, puedes definir un bloque `sources:` para unir archivos Markdown, URLs web y PDFs en un solo libro.
+
+Para extraer el contenido de un PDF con máxima fidelidad (preservando tablas y código), el sistema no usa librerías rotas de texto crudo, sino un **Ingestor Visual (`ollama_pdf`)** que toma fotos de cada página y usa tu modelo VLM local.
+
+### Precondiciones para Extracción Visual
+
+1. Instalar [Ollama](https://ollama.com/) (`brew install --cask ollama`).
+2. Descargar un modelo con capacidades visuales (ej. `qwen3.5` o `llama3.2-vision`):
+   ```bash
+   ollama pull qwen3.5
+   ```
+3. Mantener la aplicación de Ollama ejecutándose (o el servidor con `ollama serve`).
+
+### Uso de fuentes
+
+```yaml
+sources:
+  - type: markdown
+    path: libros_draft/git-libro.md
+  - type: ollama_pdf
+    path: /Rutas/a/tus/notas.pdf
+    model: qwen2.5-vl   # Se puede omitir si usas el flag --ai-model
+    on_error: skip
+```
+
+**Ingestores disponibles:**
+
+| Tipo | Descripción |
+|---|---|
+| `markdown` | Archivo `.md` local |
+| `ollama_pdf` | PDF → Markdown vía VLM local (Ollama + visión) |
+| `url` | Página web → Markdown (BeautifulSoup + markdownify) |
+| `html` | Archivo HTML local → Markdown |
+| `text` | Archivo `.txt` plano |
+| `word` | Archivo `.docx` (python-docx) |
+| `epub` | Recompilar un EPUB existente (ebooklib) |
+| `pdf` | PDF con capa de texto (PyMuPDF, sin IA) |
+| `ncx` / `opf` | Metadatos de EPUB internos |
+
+### El Flag `--ai-model`
+
+Si estás probando qué modelo entiende mejor tus diagramas, no necesitas editar el YAML constantemente. Usa el flag en la terminal para inyectar dinámicamente el modelo a usar:
+
+```bash
+# Probar con Qwen (visión)
+./generate_epub.sh libros_draft/git-libro.yaml --ai-model qwen2.5-vl
+
+# Probar con Llama Vision
+./generate_epub.sh libros_draft/git-libro.yaml --ai-model llama3.2-vision
+```
+
+---
+
 ## Audiolibros
 
 El sistema genera audiolibros M4B con narración TTS (edge-tts), chapter markers navegables,
@@ -116,8 +192,8 @@ portada embebida, intro/outro automático y caché por capítulo.
 
 ### Precondiciones adicionales para audio
 
-| Herramienta | Para qué | Instalar |
-|---|---|---|
+| Herramienta              | Para qué                                | Instalar                                          |
+| ------------------------ | --------------------------------------- | ------------------------------------------------- |
 | **ffmpeg** + **ffprobe** | ensamblar M4B, chapter markers, portada | `brew install ffmpeg` / `sudo apt install ffmpeg` |
 
 ### Uso
@@ -138,25 +214,25 @@ portada embebida, intro/outro automático y caché por capítulo.
 ```yaml
 # libros_draft/mi-libro.yaml
 audio:
-  voice: ""              # vacío = auto por idioma (es-ES-AlvaroNeural)
-  rate: "-5%"            # velocidad: ligeramente lento para mejor comprensión
-  volume: "+0%"          # volumen: neutro
-  pitch: "+0Hz"          # tono: neutro
-  bitrate: "96k"         # calidad AAC: 96k es estándar para voz hablada
-  chapter_pause: 1.5     # segundos de silencio entre capítulos
-  concurrency: 5         # capítulos narrados en paralelo (semáforo)
-  intro: true            # narrar intro automático ("Este es el audiolibro...")
-  outro: true            # narrar outro automático ("Fin del audiolibro...")
+  voice: "" # vacío = auto por idioma (es-ES-AlvaroNeural)
+  rate: "-5%" # velocidad: ligeramente lento para mejor comprensión
+  volume: "+0%" # volumen: neutro
+  pitch: "+0Hz" # tono: neutro
+  bitrate: "96k" # calidad AAC: 96k es estándar para voz hablada
+  chapter_pause: 1.5 # segundos de silencio entre capítulos
+  concurrency: 5 # capítulos narrados en paralelo (semáforo)
+  intro: true # narrar intro automático ("Este es el audiolibro...")
+  outro: true # narrar outro automático ("Fin del audiolibro...")
 ```
 
 **Voces disponibles por idioma:**
 
-| Idioma | Voz default |
-|---|---|
-| es-ES | es-ES-AlvaroNeural |
-| es-MX | es-MX-JorgeNeural |
-| en-US | en-US-GuyNeural |
-| en-GB | en-GB-RyanNeural |
+| Idioma | Voz default        |
+| ------ | ------------------ |
+| es-ES  | es-ES-AlvaroNeural |
+| es-MX  | es-MX-JorgeNeural  |
+| en-US  | en-US-GuyNeural    |
+| en-GB  | en-GB-RyanNeural   |
 
 ### Caché
 

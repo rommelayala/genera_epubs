@@ -6,3 +6,7 @@ date: "2026"
 cover:
   title: "Playwright + TypeScript"
   subtitle: "Nivel Intermedio-Avanzado"
+
+sources:
+  - type: markdown
+    path: libros_draft/playwright-ts-intermedio-avanzado.md
