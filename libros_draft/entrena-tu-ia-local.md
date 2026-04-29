@@ -785,6 +785,418 @@ Día 4+ (Local, gratis):
 2. **Si necesitas speedup:** Runpod + Colab (híbrido). Costo bajo, no compromiso.
 3. **Si escalas a producción:** Actualiza a RTX 4090 o súbete a un VPS con GPU.
 
+### 2.5.6 Construir un cluster casero: tu plataforma escalable para AIs
+
+Este es el futuro que la mayoría no ve.
+
+No necesitas una empresa con millones. No necesitas comprar servidores nuevos.
+
+**Necesitas:**
+1. Una máquina inicial (la que tienes ahora)
+2. Máquinas viejas/baratas que agregues poco a poco
+3. Un software que las una y coordine
+
+Resultado: una plataforma donde tus modelos viven, se entrenan, se mejoran. Automáticamente.
+
+#### Concepto 1: Paralelismo en una GPU
+
+Primero, entiende qué pasa dentro de UNA GPU.
+
+Una GPU no es 1 procesador. Son miles. Una RTX 4070 tiene ~5,888 "cores" (núcleos).
+
+Cuando ejecutas:
+```python
+forward_pass = modelo(datos)  # 1 línea de código
+```
+
+Internamente, miles de operaciones suceden en paralelo:
+```
+GPU Core 1 → calcula multiplicación de matriz A
+GPU Core 2 → calcula multiplicación de matriz B
+GPU Core 3 → calcula multiplicación de matriz C
+... × 5,885 más cores
+↓
+Resultado final en 1ms
+```
+
+Sin GPU (en CPU):
+```
+CPU Core 1 → calcula A (10ms)
+CPU Core 1 → calcula B (10ms)
+CPU Core 1 → calcula C (10ms)
+... = 30ms total
+```
+
+**Conclusión:** Una GPU ya es paralela. Pero solo usa 1 GPU.
+
+#### Concepto 2: Múltiples GPUs en la misma máquina
+
+Si tienes 2-3 GPUs en tu ordenador, puedes paralelizar aún más:
+
+**Data Parallelism (lo más fácil):**
+```
+Dataset: 1,000 ejemplos
+
+GPU 1 → procesa ejemplos 0-499 (en paralelo)
+GPU 2 → procesa ejemplos 500-999 (en paralelo)
+↓
+Combinan resultados
+```
+
+Resultado: **2x más rápido** (aproximadamente).
+
+#### Concepto 3: Múltiples máquinas conectadas (clustering)
+
+Ahora viene lo interesante.
+
+Imagina que tienes:
+- Máquina 1: RTX 4070 (12GB)
+- Máquina 2: RTX 3060 vieja (6GB)
+- Máquina 3: Solo CPU pero potente (32 GB RAM)
+
+Las conectas con Ethernet (wifi también funciona, pero es lento).
+
+Software las coordina:
+```
+Máquina 1 (GPU fuerte) → Entrena modelo grande
+Máquina 2 (GPU media)  → Entrena modelo mediano
+Máquina 3 (CPU)        → Prepara datos, RAG, vectorización
+↓
+Todas en paralelo, simultáneamente
+```
+
+**Capacidad resultante:** 24GB VRAM efectiva + procesamiento de datos en paralelo.
+
+#### Arquitectura de un cluster casero
+
+Aquí está el diagrama de cómo crece:
+
+```
+SEMANA 1 (Fase inicial):
+┌─────────────────────┐
+│   Máquina Principal │
+│  GPU: RTX 4070 (12G)│
+│  RAM: 32GB          │
+│  CPU: Ryzen 7       │
+│  Rol: Entrenamiento │
+└─────────────────────┘
+
+SEMANA 4 (Agregar nodo 2):
+┌──────────────────────────────────────────┐
+│                  CLUSTER                 │
+├──────────────┬──────────────────────────┤
+│ Máquina 1    │     Máquina 2 (usada)    │
+│ RTX 4070     │     GPU: GTX 1080 (8GB)  │
+│ Entrena      │     Entrena paralelo     │
+│ LLaMA 8B     │     o procesamiento      │
+└──────────────┴──────────────────────────┘
+         ↑                 ↑
+     conectadas por Ethernet / Gigabit
+
+SEMANA 8 (Agregar nodo 3):
+┌─────────────────────────────────────────────────────┐
+│                     CLUSTER (3 NODOS)               │
+├──────────────┬────────────────┬─────────────────────┤
+│ Máquina 1    │  Máquina 2     │  Máquina 3          │
+│ RTX 4070 12G │  GTX 1080 8GB  │  CPU + 64GB RAM     │
+│ Entrena LoRA │  Destila       │  Vectorización RAG  │
+│ + Inference  │  + Inference   │  + Cache distribuida│
+└──────────────┴────────────────┴─────────────────────┘
+
+SEMANA 16 (Agregar nodo 4):
+[Máquina 4: GPU usada barata (4GB), hace procesamiento específico]
+
+Resultado: Plataforma que escala sin límite. Agregas máquinas, ella se adapta.
+```
+
+#### Dónde conseguir máquinas baratas para el cluster
+
+No necesitan ser nuevas. De hecho, lo antiguo es mejor (amortizado).
+
+```
+Opción          Precio      GPU            Pros                Contras
+────────────────────────────────────────────────────────────────────────
+Marketplace     $50-200     GTX 1060-1080  Muy barato          Estado desconocido
+(usadas)
+
+Refurbished     $150-400    RTX 3060-3070  Garantía            Más caro
+(Amazon/eBay)
+
+Tienda local    $100-300    Varía          Inspeccionas antes  Pocas opciones
+electrónica
+
+Empresa cierre  $200-500    Varía mucho    Lote completo       Requiere volumen
+(auctions)
+
+Donativos       $0          A menudo bueno Gratis              Espacio/tiempo
+(universidades,
+  empresas)
+```
+
+#### Software para coordinar el cluster
+
+Ahora, cómo haces que múltiples máquinas actúen como 1.
+
+**Opción 1: Ray (RECOMENDADO para principiantes)**
+
+Ray es fácil y poderosa.
+
+```python
+# En la máquina principal (node manager)
+import ray
+
+# Conectar al cluster
+ray.init(address="auto")  # Auto-descubre máquinas
+
+# Definir tarea distribuida
+@ray.remote
+def entrenar_modelo(datos, modelo_nombre):
+    # Esta función puede correr en CUALQUIER máquina del cluster
+    return entrenar(datos, modelo_nombre)
+
+# Ejecutar en paralelo
+futures = [
+    entrenar_modelo.remote(datos_1, "llama"),
+    entrenar_modelo.remote(datos_2, "hermes"),
+    entrenar_modelo.remote(datos_3, "qwen"),
+]
+
+# Esperar resultados
+resultados = ray.get(futures)
+```
+
+Ray automáticamente:
+- Busca máquina con GPU disponible
+- Envía el código allá
+- Ejecuta
+- Devuelve resultados
+
+**Opción 2: Kubernetes (profesional, complicado)**
+
+Es lo que usan empresas grandes. Pero es overhead para un cluster casero.
+
+```bash
+# Instalación es 50+ pasos. No lo recomiendo para principiantes.
+```
+
+**Opción 3: Docker Swarm (simple, no tan poderoso como K8s)**
+
+Más simple que Kubernetes, más poderoso que nada.
+
+```bash
+# Máquina 1: manager
+docker swarm init
+
+# Máquina 2,3,4: workers
+docker swarm join --token XXXX manager-ip:2377
+```
+
+Luego defines servicios que corren distribuidos.
+
+**Opción 4: SLURM (para HPC, típico en universidades)**
+
+Si tu cluster crece mucho, SLURM es el estándar.
+
+```bash
+# Submeter job a cluster
+sbatch entrenar_modelo.slurm
+# SLURM distribuye automáticamente entre nodos
+```
+
+**Mi recomendación para ti:**
+- Comienza con **Ray** (muy simple, escala bien)
+- Si crece, considera **Docker Swarm** (un paso arriba)
+- Si tienes 10+ máquinas, aprende **SLURM**
+
+#### Configuración paso a paso de un cluster Ray casero
+
+Supongamos tienes 2 máquinas.
+
+**Máquina 1 (Head Node - la principal):**
+```bash
+# Instalar Ray
+pip install ray[default]
+
+# Iniciar Ray en modo cluster
+ray start --head --port=6379
+# Salida:
+# Ray started successfully with node ID xxxxxxx
+# Dashboard available at http://127.0.0.1:8265
+```
+
+**Máquina 2 (Worker Node):**
+```bash
+# Instalar Ray
+pip install ray[default]
+
+# Conectarse al head node
+ray start --address='192.168.1.100:6379'  # IP de Máquina 1
+# Salida:
+# Successfully connected to Ray head at 192.168.1.100:6379
+```
+
+**Verificar cluster:**
+```bash
+# En Máquina 1
+python -c "import ray; ray.init(address='auto'); print(ray.cluster_resources())"
+# Salida:
+# {'GPU': 2.0, 'CPU': 16.0, 'memory': 68GB}  # Suma de todos los nodos
+```
+
+✅ **Cluster funcionando.**
+
+#### Distribución de tareas: ejemplo real
+
+Ahora quieres que 2 modelos se entrenen en paralelo en tu cluster.
+
+```python
+import ray
+import time
+
+ray.init(address="auto")
+
+@ray.remote(num_gpus=1)  # Esta tarea NECESITA 1 GPU
+def entrenar_llama(epochs):
+    print(f"Entrenando LLaMA en GPU...")
+    # Simular entrenamiento
+    time.sleep(10)
+    return "LLaMA fine-tuned"
+
+@ray.remote(num_gpus=0.5)  # Puede usar CPU o media GPU
+def procesar_datos(archivos):
+    print(f"Procesando datos...")
+    time.sleep(5)
+    return "Datos listos"
+
+# Ejecutar en paralelo
+tarea_1 = entrenar_llama.remote(epochs=3)
+tarea_2 = procesar_datos.remote(archivos=["doc1.pdf", "doc2.pdf"])
+
+# Esperar que ambas terminen
+resultado_1, resultado_2 = ray.get([tarea_1, tarea_2])
+
+print(resultado_1)  # "LLaMA fine-tuned"
+print(resultado_2)  # "Datos listos"
+```
+
+**Qué pasó:**
+1. Ray vio que `entrenar_llama` necesita GPU
+2. Lo envió a Máquina 1 (que tiene GPU disponible)
+3. Ray vio que `procesar_datos` no necesita GPU
+4. Lo envió a Máquina 2 (que está libre)
+5. Ambas corren en paralelo
+6. Esperas resultados
+
+**Tiempo total:** ~10 segundos (las 2 en paralelo)
+**Sin cluster:** ~15 segundos (una después de otra)
+
+#### Escenario real: plataforma de AIs que se mejora sola
+
+Aquí está el ciclo completo en tu cluster:
+
+```
+Lunes 8am (automático, Ray scheduler):
+  - Máquina 1 (GPU): Fine-tuning de LLaMA con datos nuevos
+  - Máquina 2 (CPU+GPU): Destilación de modelo
+  - Máquina 3 (CPU): Procesamiento de logs nuevos
+
+Martes 8am:
+  - Máquina 1: Evaluación de nuevos modelos
+  - Máquina 2: Fusión de especialistas
+  - Máquina 3: Vectorización de nuevos datos para RAG
+
+Resultado: Todos tus modelos mejoran cada semana automáticamente.
+```
+
+Para esto, usas **APScheduler** + Ray:
+
+```python
+from apscheduler.schedulers.background import BackgroundScheduler
+import ray
+
+@ray.remote
+def ciclo_mejora_semanal():
+    """Tarea que corre automáticamente cada lunes"""
+    print("Iniciando mejora semanal...")
+    
+    # Fine-tuning
+    nuevo_modelo = entrenar_llama.remote(epochs=5)
+    
+    # Destilación
+    modelo_destilado = destilar.remote(nuevo_modelo)
+    
+    # Evaluación
+    metricas = evaluar.remote(modelo_destilado)
+    
+    return ray.get([nuevo_modelo, modelo_destilado, metricas])
+
+# Programar
+scheduler = BackgroundScheduler()
+scheduler.add_job(ciclo_mejora_semanal.remote, 'cron', day_of_week='mon', hour=8)
+scheduler.start()
+```
+
+**Cada semana, automáticamente:**
+- Tu cluster mejora modelos
+- Sin que toques nada
+- Usando GPUs que de otra forma estarían ociosas
+
+#### Presupuesto realista para un cluster casero
+
+```
+Fase 1 (Semana 0): $0
+- Ya tienes: 1 máquina con GPU
+
+Fase 2 (Mes 1): $200-300
+- Máquina usada con GPU (GTX 1080)
+- Switch Ethernet Gigabit: $20
+- Cables: $10
+
+Fase 3 (Mes 2): $100-150
+- Máquina CPU fuerte (procesamiento de datos)
+
+Fase 4 (Mes 4): $200-400
+- Otra GPU usada o máquina más
+
+Total 6 meses: $500-850 inversión
+Máquinas operativas: 4
+GPUs totales: 3
+Capacidad: ~25GB VRAM + CPU procesamiento
+
+Costo mensual: $0 (solo electricidad: ~$50)
+ROI vs AWS: Te ahorras $500/mes en GPU hours
+Payback: 1-2 meses
+```
+
+#### Checklist: construir tu primer cluster
+
+- [ ] Máquina 1 funcionando (tienes)
+- [ ] Máquina 2 usada comprada (RTX 3060 / GTX 1080)
+- [ ] Switch Ethernet Gigabit (25GB/s es ideal)
+- [ ] Cables Ethernet CAT 6 o superior
+- [ ] Ray instalado en ambas máquinas
+- [ ] Máquinas en la misma red (ping entre ellas)
+- [ ] Ray cluster iniciado y verificado
+- [ ] Primer script distribuido ejecutado
+- [ ] Ray dashboard abierto (http://localhost:8265) para monitoreo
+
+#### Monitoreo y dashboard
+
+Ray tiene dashboard integrado:
+
+```bash
+# Abrir en navegador
+http://localhost:8265
+```
+
+Ves:
+- GPUs disponibles en cada nodo
+- Tareas en ejecución
+- Bottlenecks (cuello de botella)
+- Historial de rendimiento
+
+Ahora sabes qué máquina está ociosa y dónde agregar más poder.
+
 ### 2.6 Instalación de dependencias Python para fine-tuning
 
 Antes de fine-tunear, necesitas algunas librerías.
