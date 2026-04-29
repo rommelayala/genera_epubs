@@ -6,3 +6,7 @@ date: "2026"
 cover:
   title: "Fundamentos de IA"
   subtitle: "Para Profesionales del Código"
+
+sources:
+  - type: markdown
+    path: libros_draft/fundamentos-ia-libro.md

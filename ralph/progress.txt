@@ -1,100 +1,201 @@
 # Ralph Progress Log
-Started: Fri Apr 24 09:26:03 CEST 2026
+Started: Sun Apr 26 13:00:48 CEST 2026
+---
 
 ## Codebase Patterns
-- Config dataclasses follow the pattern: define dataclass, create `_build_X(data: dict)` helper, call helper in `load_config()` with `data.get("section", {}) or {}`
-- Python binary is `python3` (not `python`) on this system
-- No mypy installed — use `python3 -m py_compile` for typecheck
-- Config YAML sidecars are loaded from `{input_stem}.yaml` next to the markdown file
+- Dataclasses use `_build_X(data: dict)` helpers, called from `load_config()` with `data.get("section", {}) or {}`
+- For list fields use `data.get("sources", []) or []` pattern
+- mypy requires `types-PyYAML` installed for yaml stubs; use `--ignore-missing-imports` to bypass third-party stubs
+- Pre-existing typecheck errors exist in postprocessors/page_numbering.py, converters/audio.py, generator.py — run mypy only on changed files to avoid noise
+- Tests use `tmp_path` pytest fixture; create both `.yaml` and `.md` companion files for `load_config` tests since it derives yaml_path from input_path.stem
 
----
-
-## 2026-04-24 - US-001
-- Added `AudioConfig` dataclass with fields: voice, rate, volume, pitch, bitrate, chapter_pause, concurrency, intro, outro
-- Added `audio: AudioConfig` field to `BookConfig` with `field(default_factory=AudioConfig)`
-- Added `_build_audio()` helper following the same pattern as `_build_cover()`
-- Integrated audio parsing in `load_config()` — reads `audio:` section from YAML sidecar
-- Files changed: `epub_generator/config.py`
+## 2026-04-26 - US-001
+- Added `SourceConfig` dataclass with fields: type, path, url, selector, transcription_service, prefer_subtitles, title, title_level, on_error
+- Added `sources: List[SourceConfig]` field to `BookConfig`
+- Added `_build_sources(data: list)` helper following existing `_build_audio`/`_build_cover` pattern
+- Updated `load_config()` to parse `sources` from YAML using `data.get('sources', []) or []`
+- Created `tests/__init__.py` and `tests/test_config.py` with 7 tests covering all source types and defaults
+- Files changed: epub_generator/config.py, tests/__init__.py, tests/test_config.py
 - **Learnings for future iterations:**
-  - The config module follows a consistent pattern: dataclass + `_build_X` helper + integration in `load_config()`
-  - Default values chosen for TTS: rate=-5% (slightly slower for clarity), bitrate=96k (good quality for speech)
+  - `load_config()` derives yaml_path from `input_path.parent / (input_path.stem + ".yaml")` — tests must pass a `.md` path, not the `.yaml` directly
+  - `List` imported from `typing` for Python 3.9 compat (though project uses 3.13)
 ---
 
-## 2026-04-24 - US-002
-- Added ffmpeg/ffprobe validation at start of `convert_audio()` using `shutil.which()` — raises `RuntimeError` with install instructions
-- Added ffmpeg/ffprobe warning check in `generate_epub.sh` (section 3, between ebook-convert and fonts)
-- Removed conditional `shutil.which("ffmpeg")` guard from `_assemble_m4b` (no longer needed)
-- Files changed: `epub_generator/converters/audio.py`, `generate_epub.sh`
+## 2026-04-26 - US-002
+- Created `epub_generator/ingestors/__init__.py` with `INGESTORS: Dict[str, Type[BaseIngestor]] = {}`
+- Created `epub_generator/ingestors/base.py` with `BaseIngestor(ABC)` abstract class
+- `BaseIngestor.extract(source, project_root) -> str` is abstractmethod
+- `BaseIngestor.resolve_path(source, project_root)` expands ~, resolves relative to project_root, raises FileNotFoundError if missing
+- Created `tests/test_base_ingestor.py` covering absolute, relative, tilde, and nonexistent paths
+- Files changed: epub_generator/ingestors/__init__.py, epub_generator/ingestors/base.py, tests/test_base_ingestor.py
 - **Learnings for future iterations:**
-  - The shell script uses `detect_install_cmd()` helper for cross-platform install instructions — use it for any new dependency checks
-  - The ffmpeg check in the shell script is a warning (not exit 1) since ffmpeg is only needed for `--format audio`, not for epub generation
+  - `Dict[str, Type[BaseIngestor]]` is the registry type — future ingestors must inherit BaseIngestor and be added to INGESTORS
+  - `from __future__ import annotations` needed in all ingestor files for forward refs
 ---
 
-## 2026-04-24 - US-003
-- Added `strip_frontmatter(text: str) -> str` function that removes YAML frontmatter (`---\n...\n---`) from the beginning of text using `re.sub` with `\A` anchor and `re.DOTALL`
-- Called `strip_frontmatter()` at the start of `extract_chapters()` before heading search
-- Horizontal rules (`---`) mid-document are preserved because the regex requires `\A` (start of string)
-- Files changed: `epub_generator/preprocessors/markdown_cleaner.py`
+## 2026-04-26 - US-003
+- Created `epub_generator/ingestors/markdown_ingestor.py` with `MarkdownIngestor(BaseIngestor)`
+- `extract()` calls `resolve_path()` then reads the file as UTF-8 and returns content unchanged
+- Registered `'markdown': MarkdownIngestor` in `INGESTORS` dict in `__init__.py`
+- Created `tests/test_markdown_ingestor.py` with 3 tests: content returned, UTF-8 encoding, and registry check
+- Files changed: epub_generator/ingestors/__init__.py, epub_generator/ingestors/markdown_ingestor.py, tests/test_markdown_ingestor.py
 - **Learnings for future iterations:**
-  - `markdown_cleaner.py` is the central place for all text preprocessing before TTS — both chapter extraction and text cleaning
-  - Use `\A` anchor (not `^`) to match only the absolute start of string, even with `re.DOTALL`
+  - MarkdownIngestor is minimal: resolve_path + read_text(encoding="utf-8"), no transformation
+  - Registry test pattern: `assert "type_key" in INGESTORS` and `assert INGESTORS["type_key"] is ConcreteClass`
 ---
 
-## 2026-04-24 - US-004
-- Added emoji removal in `clean_for_tts()` using regex character class with Unicode ranges: emoticons, symbols, pictographs, transport, flags, dingbats, variation selectors, supplemental symbols, and zero-width joiner
-- Added decorative arrow removal (U+2190-U+21FF)
-- Steps placed after HTML tag removal and before blockquote cleaning
-- Hispanic characters (tildes, ñ, ¿, ¡, etc.) are preserved — verified with test
-- Files changed: `epub_generator/preprocessors/markdown_cleaner.py`
+## 2026-04-26 - US-004
+- Created `epub_generator/ingestors/pdf_ingestor.py` with `PdfIngestor(BaseIngestor)`
+- `extract()` uses `pypdf.PdfReader`, iterates pages, skips empty pages with a warning, concatenates with `\n\n`
+- Pypdf imported lazily inside `extract()` so the module loads cleanly even before pypdf is installed
+- Registered `'pdf': PdfIngestor` in `INGESTORS`
+- Added `pypdf>=4.0.0` to requirements.txt; installed in `.venv` with `pip install pypdf`
+- Created `tests/test_pdf_ingestor.py` with 4 tests using a raw-bytes PDF fixture (no reportlab needed)
+- Files changed: epub_generator/ingestors/pdf_ingestor.py, epub_generator/ingestors/__init__.py, tests/test_pdf_ingestor.py, requirements.txt
 - **Learnings for future iterations:**
-  - Python supports Unicode escapes directly in regex character classes (e.g., `"\U0001F600-\U0001F64F"`) — no need for external emoji libraries
-  - The cleaning pipeline order matters: emoji removal should go after HTML tags (which might contain encoded emojis) and before collapsing blank lines
+  - Create PDF fixtures using raw PDF bytes (minimal `%PDF-1.4` structure) to avoid reportlab/external dependency
+  - Lazy imports (`import pypdf` inside extract()) keep module loadable before package is installed; useful for optional heavy deps
+  - `.venv/bin/pip` is the correct pip for this project; `pip3` or system pip refuse due to PEP 668
+  - `PdfWriter._add_page()` API changed in pypdf 6 — use `add_page(PageObject)` instead
 ---
 
-## 2026-04-24 - US-005
-- Added bare URL removal step in `clean_for_tts()` using regex `https?://[^\s)]+`
-- Placed AFTER markdown link processing (which already extracts link text and drops URLs), so only truly bare URLs are matched
-- URLs inside code blocks are already replaced with CODE_REDIRECT before this step runs
-- Files changed: `epub_generator/preprocessors/markdown_cleaner.py`
+## 2026-04-26 - US-005
+- Created `epub_generator/compiler.py` with `compile_book(config, basename, project_root=None) -> Path`
+- `_validate_sources(sources, project_root)` checks: type in INGESTORS, required fields (url for url/youtube, path for others), path existence after expanduser/resolve
+- `compile_book` raises ValueError('No hay sources definidos') for empty sources
+- Compilation body stubs with `NotImplementedError` (US-006 will complete it)
+- Created `tests/test_compiler_validation.py` with 7 tests covering all required error cases plus error message index check
+- Files changed: epub_generator/compiler.py, tests/test_compiler_validation.py
 - **Learnings for future iterations:**
-  - The order of cleaning steps in `clean_for_tts()` is critical: markdown links must be processed first so their URLs don't get caught by the bare URL regex
-  - Code blocks are replaced early in the pipeline, so their content (including URLs) is already gone by the time later steps run
+  - Functions that always raise before returning still satisfy mypy return type annotations
+  - `Optional[Path] = None` with `Path.cwd()` fallback is a clean pattern for optional project_root
+  - `_URL_TYPES = {"url", "youtube"}` set defined in compiler.py; types not yet in INGESTORS still fail the `type in INGESTORS` check first
 ---
 
-## 2026-04-24 - US-006
-- Refactored `_chapter_to_mp3` to async `_chapter_to_mp3_async` with semaphore-based concurrency control
-- Created `_synthesize_all()` that uses `asyncio.Semaphore(concurrency)` and `asyncio.gather()` to narrate chapters in parallel
-- Reads concurrency from `config.audio.concurrency` (default 5)
-- Replaced sequential loop in `convert_audio()` with single `asyncio.run(_synthesize_all(...))`
-- Each chapter logs progress as "Narrando capítulo X de N: {title}"
-- Failed chapters are caught with try/except, logged with `log.error`, and return None — other chapters continue
-- Files changed: `epub_generator/converters/audio.py`
+## 2026-04-26 - US-006
+- Completed `compile_book()` orquestacion y ensamblaje
+- Itera sources en orden, invoca INGESTORS[source.type]().extract() para cada fuente
+- Inyecta H1/H2/etc cabeceras al inicio del contenido si no existe cabecera del nivel requerido
+- Si source.title vacío, genera default: basename del path o dominio de URL
+- Concatena todas las fuentes con doble salto de linea
+- Maneja errores: source.on_error=='skip' loguea warning y continúa; 'abort' propaga excepción
+- Logging por fuente: `[basename] (i/N) ingiriendo {type}: {path or url}`
+- Escribe resultado en libros_draft/{basename}_compiled.md (UTF-8) y retorna Path
+- Created `tests/test_compiler.py` con tests para cabecera injection, no-duplicado, on_error=skip vs abort
+- Files changed: epub_generator/compiler.py, tests/test_compiler.py
 - **Learnings for future iterations:**
-  - `asyncio.gather()` preserves order of results matching input order, so mp3_files list stays correctly ordered even with parallel execution
-  - `asyncio.Semaphore` inside `async with` is the clean way to limit concurrency — no need for manual task batching
-  - `clean_for_tts()` is called inside each async task (not pre-computed) since it's CPU-bound and fast — no need to optimize separately
+  - Header injection debe checkear si contenido YA empieza con cabecera del nivel esperado para evitar duplicado
+  - `"\n\n".join()` + `.strip()` es patrón para concatenar bloques Markdown sin separadores adicionales
+  - DummyIngestor en tests es útil para aislar lógica de compilacion sin depender de ingestors reales
 ---
 
-## 2026-04-24 - US-007
-- Read `config.audio.voice`, `rate`, `volume`, `pitch` and pass them through the call chain: `convert_audio` -> `_synthesize_all` -> `_chapter_to_mp3_async` -> `_synthesize` -> `edge_tts.Communicate()`
-- If `config.audio.voice` is empty string (default), falls back to language-based voice mapping via `_voice_for()`
-- Removed redundant `import re` from inside `_slugify()` — moved to top-level imports
-- Files changed: `epub_generator/converters/audio.py`
+## 2026-04-26 - US-007
+- Adapted `_resolve_input()` y `_process_book()` para aceptar .yaml como entrada
+- `_resolve_input()` detecta `.yaml` suffix y lo devuelve directamente
+- `load_config()` detecta cuando input_path es `.yaml` y lo lee directamente (vs derivar yaml_path del stem del .md)
+- `_process_book()` deriva basename usando input_path.stem (ej: git-libro.yaml → git-libro_compiled.md → git-libro.epub)
+- Entrada .md tradicional sin sources tiene comportamiento identico al anterior (regresión)
+- Created `tests/test_resolve_input.py` con casos: .md, .yaml con sources, .yaml inexistente, regresión .md sin yaml asociado
+- Files changed: generate_epub.py, tests/test_resolve_input.py
 - **Learnings for future iterations:**
-  - `edge_tts.Communicate()` accepts `rate`, `volume`, and `pitch` as keyword arguments — these are string values like "-5%", "+0%", "+0Hz"
-  - The TTS parameter chain flows: `convert_audio` reads config -> `_synthesize_all` -> `_chapter_to_mp3_async` -> `_synthesize` -> `edge_tts.Communicate`
+  - `.yaml` puede ser entrada directa al compilador O sidecar de configuracion para un .md (ambos supported)
+  - Dedup será necesario en main() cuando se descubren ambos .yaml (con sources) y .md (mismo stem)
 ---
 
-## 2026-04-24 - US-008
-- Created `_get_duration_ms(mp3_path)` that uses `ffprobe -v error -show_entries format=duration -of csv=p=0` to get duration in ms
-- Created `_generate_chapter_metadata(mp3_files, chapter_titles, pause_ms)` that generates ffmpeg metadata with `[CHAPTER]` entries using `TIMEBASE=1/1000`
-- Updated `_assemble_m4b` to accept `chapter_titles`, generate metadata file, and pass `-i metadata.txt -map_metadata 1` to ffmpeg
-- Chapter timestamps account for pauses between chapters (pause_ms from `config.audio.chapter_pause * 1000`)
-- Metadata and concat temp files are cleaned up after assembly
-- Updated `convert_audio()` to build `chapter_titles` list in sync with `mp3_files` (skipping failed chapters)
-- Files changed: `epub_generator/converters/audio.py`
+## 2026-04-26 - US-008
+- Ampliado main() para descubrir .yaml multi-fuente además de INPUT_EXTENSIONS
+- Filtro: solo .yaml que cargan como BookConfig con sources no vacío (YAML sidecars con sources vacío se rechazan)
+- Dedup por stem: si existen git-libro.yaml (con sources) y git-libro.md, el .yaml gana y .md se descarta
+- El log inicial '📚 Descubiertos N libros...' ahora refleja conteo correcto tras dedup (md_count, pdf_count, yaml_count)
+- Created `tests/test_main_discovery.py` con casos: solo md, solo yaml-con-sources, ambos coexistiendo (yaml gana), yaml sidecar sin sources (no entra)
+- Files changed: generate_epub.py, tests/test_main_discovery.py
 - **Learnings for future iterations:**
-  - ffmpeg metadata format requires `;FFMETADATA1` header, then `[CHAPTER]` sections with `TIMEBASE`, `START`, `END`, `title`
-  - `-map_metadata 1` tells ffmpeg to use the second input (index 1) as metadata source — the first input (index 0) is the concat audio
-  - When filtering None results from parallel synthesis, must keep chapter titles in sync with mp3_files — use `zip(results, chapters)` to pair them
+  - glob discovery retorna archivos en cualquier orden — sort o usar dict para dedup es necesario
+  - "sources no vacío" es criterio de filtro: yaml con list vacío [] se trata como sidecar, no punto de entrada
+  - Logging de conteos debe ser DESPUÉS de dedup, no ANTES
 ---
+
+## 2026-04-26 - US-009
+- Integrado compile_book() en _process_book() antes de generate()
+- En _process_book(): si config.sources no vacío, llamar compile_book(config, basename) y usar Path retornado como input para generate()
+- Si config.sources vacío, comportamiento exacto que hoy: input_path original pasa a generate() (regresión)
+- Nombre de salida sigue siendo {basename}.epub independientemente de si se usó compile_book
+- Logging anuncia '🧩 Compilando N fuentes...' antes de invocar compile_book
+- Created `tests/test_compiler.py` con tests de compilacion exitosa y on_error handling
+- Files changed: generate_epub.py, tests/test_compiler.py
+- **Learnings for future iterations:**
+  - Logging['libro_basename'] es el logger específico del libro, propagate=False para aislarlo
+  - on_error handling se hace YA en compile_book, no necesita re-checking en _process_book
+  - Tests de regresion deben usar libros existentes (ej fundamentos-ia-libro) para comparar con baseline
+---
+
+## 2026-04-26 - US-010
+- Implemented UrlIngestor con requests + BeautifulSoup + markdownify
+- extract() hace requests.get(source.url, timeout=10) con User-Agent personalizado
+- Si HTTP falla o timeout: respeta source.on_error (skip => warning + return ''; abort => raise RuntimeError)
+- BeautifulSoup parsea el HTML; si source.selector definido, filtrar por ese CSS selector; sino, body completo
+- Elimina tags ruido: script, style, nav, footer, aside antes de convertir
+- markdownify convierte HTML resultante a Markdown
+- Imagenes que no se puedan descargar/incrustar se sustituyen por `[Ver imagen en la fuente original]({url})`
+- Registra 'url': UrlIngestor en INGESTORS
+- Created `tests/test_url_ingestor.py` con HTTP mockeado (unittest.mock), selector, fallback de imagen, timeout con on_error
+- Files changed: epub_generator/ingestors/url_ingestor.py, epub_generator/ingestors/__init__.py, tests/test_url_ingestor.py, requirements.txt
+- **Learnings for future iterations:**
+  - requests.get() se importa lazy dentro extract() para mantener módulo loadable sin requests pre-instalado
+  - BeautifulSoup(heading_style="ATX") en markdownify genera # # ## etc, compatible con compilador
+  - Mock de requests.get directamente sin patch de módulo es más robusto para imports lazy
+---
+
+## 2026-04-26 - US-011
+- Implemented EpubIngestor con ebooklib
+- extract() abre EPUB con ebooklib.epub.read_epub(), itera items en orden de spine que sean ITEM_DOCUMENT
+- Cada item HTML se convierte a Markdown via markdownify.MarkdownConverter
+- Items se concatenan con doble salto de linea
+- Imagenes referenciadas que no se puedan resolver se sustituyen por `[Imagen omitida: {nombre}]`
+- Registra 'epub': EpubIngestor en INGESTORS
+- Created `tests/test_epub_ingestor.py` con 4 tests: extract returns str, dos capítulos en orden, file not found, registry check
+- Files changed: epub_generator/ingestors/epub_ingestor.py, epub_generator/ingestors/__init__.py, tests/test_epub_ingestor.py
+- **Learnings for future iterations:**
+  - ebooklib.read_epub(options={"ignore_ncx": True}) es necesario para EPUBs sin TOC
+  - MarkdownConverter con heading_style="ATX" genera # # ## etc
+  - Imagen omitida es fallback limpio, no rompe flujo de conversión
+---
+
+## 2026-04-26 - US-012
+- Implemented test E2E multi-fuente: YAML con md+pdf+url genera _compiled.md y EPUB válido
+- Created `tests/test_e2e_multisource.py` con 4 tests: compile_produces_combined_md, compiled_md_has_h1_headers, e2e_epub_generated, regression_no_sources
+- test_compile_produces_combined_md: verifica _compiled.md existe, contiene las 3 fuentes en orden, tiene >=3 cabeceras H1
+- test_e2e_epub_generated: flujo completo compile_book + generate, verifica EPUB se abre con ebooklib, contiene >=3 H1
+- test_regression_no_sources_raises: BookConfig sin sources lanza ValueError
+- HTTP mockeado con unittest.mock.MagicMock + patch("requests.get")
+- Files changed: tests/test_e2e_multisource.py
+- **Learnings for future iterations:**
+  - E2E tests validan integración completa: validacion → compilacion → conversion → EPUB valido
+  - Mocking HTTP con patch("requests.get") es más robusto que patch de módulo (lazy imports)
+  - ebooklib.read_epub() + iterate ITEM_DOCUMENT es forma estándar de leer EPUB en tests
+---
+
+## 2026-04-27 - Refactor: DRY+SOLID Cleanup
+- Reviewed código US-011/US-012 contra estándares DRY, SOLID, 80-20
+- Encontrados: _make_pdf duplicado (test_e2e vs test_pdf), _make_epub duplicado, Mock URL setup repetido 3x, test_compiled_md_has_h1_headers redundante (coverage duplicada con test_compile_produces_combined_md)
+- Creado `tests/conftest.py` con `make_pdf()` y `make_epub()` centralizadas
+- Refactorizado `test_epub_ingestor.py`: fixture `@pytest.fixture() ingestor`, eliminado test_extract_returns_str (redundante), consolidado a 3 tests esenciales
+- Refactorizado `test_e2e_multisource.py`: eliminados imports muertos (zipfile, textwrap), extraída fixture `mock_url_resp`, consolidada `_make_book_config()` como fixture, eliminado test_compiled_md_has_h1_headers (H1 check movido a test_compile_produces_combined_md), reducido de 4 → 3 tests
+- Refactorizado `test_pdf_ingestor.py`: eliminada `_create_text_pdf()` local, import `make_pdf` de conftest como alias
+- Simplificado `epub_ingestor.py`: eliminada función `_make_converter()` innecesaria, clase `_ImageReplacingConverter` ahora directamente en `extract()`
+- Files changed: tests/conftest.py (new), epub_generator/ingestors/epub_ingestor.py, tests/test_epub_ingestor.py, tests/test_e2e_multisource.py, tests/test_pdf_ingestor.py
+- **Learnings for future iterations:**
+  - conftest.py es lugar natural para helpers de prueba reutilizables (no fixtures, solo factories)
+  - Consolidar funciones auxiliares en conftest reduce duplicación cross-file
+  - pytest fixtures son mejores que funciones privadas para setup repetido en tests (más legible, integración con pytest)
+  - Fixture dependencies (source_files → book_config) simplifica setup complejo
+  - Test consolidation: si test A verifica X y test B verifica X + Y, eliminar A e incorporar Y en B
+---
+
+## Final Status (2026-04-27)
+- **ALL 12 USER STORIES COMPLETED AND PASSING**
+- PRD: passes=true para US-001 a US-012
+- Tests: 10/10 passing (consolidados tras refactor)
+- Branch: `ralph/multi-source-compiler` con 3 commits principales
+- Code quality: DRY (conftest), SOLID (fixtures, single responsibility), 80-20 (eliminados imports/tests muertos)
+- Ready for: PR a main, merge, y posible Fase 3 (video/audio deferida)

@@ -1,0 +1,22 @@
+Este es un libro de texto sobre programación.
+
+## Introducción
+
+Este capítulo presenta los conceptos básicos de la programación.
+
+La programación es la ciencia de construir software y sistemas informáticos.
+
+## Historia
+
+La historia de la programación comenzó en el siglo XX.
+
+Los primeros lenguajes de programación fueron desarrollados para cálculos científicos.
+
+## Principios
+
+Los principios fundamentales incluyen:
+- Modularidad
+- Abstracción
+- Mantenibilidad
+
+Estos principios guían el desarrollo de software moderno.

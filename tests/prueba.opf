@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0"
+    xmlns="http://www.idpUBLice.org/2007/epub3"
+    xmlns:dc="http://purl.org/dc/elements/1.1/">
+
+    <metadata>
+        <dc:title>Prueba EPUB</dc:title>
+        <dc:creator>Ejemplo Autor EPUB</dc:creator>
+        <dc:language>es</dc:language>
+    </metadata>
+
+    <items>
+        <item id="chapter-1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+        <item id="chapter-2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+        <item id="chapter-3" href="chapter3.xhtml" media-type="application/xhtml+xml"/>
+    </items>
+
+    <spine>
+        <itemref itemref="chapter-1"/>
+        <itemref itemref="chapter-2"/>
+        <itemref itemref="chapter-3"/>
+    </spine>
+</package>

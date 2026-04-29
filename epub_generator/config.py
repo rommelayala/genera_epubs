@@ -2,8 +2,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import List
 
 import yaml
+
+
+@dataclass
+class SourceConfig:
+    type: str = ""
+    path: str = ""
+    url: str = ""
+    selector: str = ""
+    transcription_service: str = "whisper"
+    prefer_subtitles: bool = True
+    title: str = ""
+    title_level: int = 1
+    on_error: str = "skip"
+    model: str = ""
 
 
 @dataclass
@@ -39,8 +54,10 @@ class BookConfig:
     description: str = ""
     language: str = "es-ES"
     date: str = ""
+    ai_model: str = ""
     cover: CoverConfig = field(default_factory=CoverConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
+    sources: List[SourceConfig] = field(default_factory=list)
 
 
 def _build_audio(data: dict) -> AudioConfig:
@@ -73,8 +90,32 @@ def _build_cover(data: dict) -> CoverConfig:
     )
 
 
+def _build_sources(data: list) -> List[SourceConfig]:
+    defaults = SourceConfig()
+    result = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        result.append(SourceConfig(
+            type=item.get("type", defaults.type),
+            path=item.get("path", defaults.path),
+            url=item.get("url", defaults.url),
+            selector=item.get("selector", defaults.selector),
+            transcription_service=item.get("transcription_service", defaults.transcription_service),
+            prefer_subtitles=item.get("prefer_subtitles", defaults.prefer_subtitles),
+            title=item.get("title", defaults.title),
+            title_level=item.get("title_level", defaults.title_level),
+            on_error=item.get("on_error", defaults.on_error),
+            model=item.get("model", defaults.model),
+        ))
+    return result
+
+
 def load_config(input_path: Path) -> BookConfig:
-    yaml_path = input_path.parent / (input_path.stem + ".yaml")
+    if input_path.suffix.lower() == ".yaml":
+        yaml_path = input_path
+    else:
+        yaml_path = input_path.parent / (input_path.stem + ".yaml")
 
     if not yaml_path.exists():
         return BookConfig()
@@ -90,6 +131,7 @@ def load_config(input_path: Path) -> BookConfig:
     defaults = BookConfig()
     cover_data = data.get("cover", {}) or {}
     audio_data = data.get("audio", {}) or {}
+    sources_data = data.get("sources", []) or []
 
     return BookConfig(
         title=data.get("title", defaults.title),
@@ -97,6 +139,8 @@ def load_config(input_path: Path) -> BookConfig:
         description=data.get("description", defaults.description),
         language=data.get("language", defaults.language),
         date=data.get("date", defaults.date),
+        ai_model=data.get("ai_model", defaults.ai_model),
         cover=_build_cover(cover_data),
         audio=_build_audio(audio_data),
+        sources=_build_sources(sources_data),
     )

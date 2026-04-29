@@ -1,0 +1,4 @@
+# Ralph Progress Log
+Started: Sun Apr 26 2026
+Feature: Compilador Multi-Fuente (Ingestion Pipeline) — Fases 1 y 2
+Plan source: docs/tasks/plan_compilador_multifuente.md

@@ -1,0 +1,12 @@
+title: "Entrenando a Mi IA Local con mi MAC"
+author: "Rommel Ayala"
+description: "Guía completa para entrenar a una IA Local con mi MAC."
+language: "es-ES"
+date: "2026"
+cover:
+  title: "Entrenando a Mi IA Local con mi MAC"
+  subtitle: "De Usuario Principiante a Casi experto"
+
+sources:
+  - type: markdown
+    path: libros_draft/entrenado_mi_IA_Local.md

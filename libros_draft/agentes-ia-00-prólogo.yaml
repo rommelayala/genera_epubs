@@ -1,0 +1,45 @@
+title: Prólogo: Bienvenido a la Era de los Agentes
+author: Rommel Ayala
+language: es-ES
+date: 2026-04-27
+cover:
+  title: "Prólogo"
+  subtitle: "Bienvenido a la Era de los Agentes"
+content: |
+  # Prólogo: Bienvenido a la Era de los Agentes
+
+  ## El despertar de una nueva era
+
+  Vivimos en un momento histórico donde la inteligencia artificial ha dejado de ser una herramienta estática para convertirse en un socio colaborativo dinámico.
+
+  ## ¿Qué es un agente de IA?
+
+  Un agente de IA no es simplemente un modelo que responde preguntas. Es una entidad autónoma que puede:
+
+  - **Observar** su entorno
+  - **Pensar** sobre las situaciones
+  - **Actuar** mediante herramientas
+  - **Aprender** de sus experiencias
+  - **Colaborar** con otros agentes y humanos
+
+  ## Por qué este libro
+
+  Este libro-tutorial te guiará desde los cimientos hasta la implementación de sistemas complejos. Aprenderás:
+
+  - El framework **5W1H** (¿Qué, Por qué, Dónde, Cuándo, Quién, Cómo) para analizar agentes
+  - Herramientas prácticas: Python, LangChain, AutoGen, CrewAI
+  - Patrones de arquitectura y mejores prácticas
+  - Casos de uso reales y retos de implementación
+
+  ## A quién va dirigido
+
+  - Desarrolladores de IA y data scientists
+  - Arquitectos de sistemas
+  - Emprendedores técnicos
+  - Estudiantes de inteligencia artificial
+
+  ## Aviso legal
+
+  Los conceptos explicados son una mezcla de experiencia práctica y conocimiento teórico. Implementa, experimenta, y aprende con tus propios errores.
+
+---

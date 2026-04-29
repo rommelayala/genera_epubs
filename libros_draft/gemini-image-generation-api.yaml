@@ -6,3 +6,7 @@ date: "2026"
 cover:
   title: "Gemini Image Generation API"
   subtitle: "Guía Completa de Generación de Imágenes con IA"
+
+sources:
+  - type: markdown
+    path: libros_draft/gemini-image-generation-api.md

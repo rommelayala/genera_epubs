@@ -1,0 +1,212 @@
+{
+  "project": "genera_epubs",
+  "branchName": "ralph/multi-source-compiler",
+  "description": "Compilador Multi-Fuente — extender genera_epubs para que un YAML pueda declarar multiples fuentes (Markdown, PDF, URL, EPUB) e ingerirlas en un Master Markdown que alimenta al pipeline existente sin romper la compatibilidad. Plan: docs/tasks/plan_compilador_multifuente.md. Fases 1 y 2 (Fase 3 video/audio queda diferida).",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Agregar SourceConfig dataclass y campo sources a BookConfig en config.py",
+      "description": "Como desarrollador, necesito el dataclass SourceConfig y el campo sources en BookConfig para que load_config pueda parsear la lista de fuentes desde el YAML.",
+      "acceptanceCriteria": [
+        "SourceConfig dataclass con campos: type (str), path (str=''), url (str=''), selector (str=''), transcription_service (str='whisper'), prefer_subtitles (bool=True), title (str=''), title_level (int=1), on_error (str='skip')",
+        "BookConfig agrega `sources: list[SourceConfig] = field(default_factory=list)`",
+        "Helper `_build_sources(data: list[dict]) -> list[SourceConfig]` siguiendo el patron existente de _build_audio/_build_cover",
+        "load_config() invoca _build_sources con data.get('sources', []) or []",
+        "YAML sin sources sigue funcionando (lista vacia por defecto)",
+        "Typecheck passes",
+        "Tests pass: test_config carga YAML con sources de cada tipo"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Crear modulo epub_generator/ingestors/ con BaseIngestor y registry",
+      "description": "Como desarrollador, necesito el esqueleto del modulo de ingestors con clase abstracta y registry para que las implementaciones concretas se registren de forma uniforme.",
+      "acceptanceCriteria": [
+        "Crear epub_generator/ingestors/__init__.py exportando dict INGESTORS = {} (se ira poblando en stories siguientes)",
+        "Crear epub_generator/ingestors/base.py con BaseIngestor(ABC)",
+        "BaseIngestor.extract(source: SourceConfig, project_root: Path) -> str es abstractmethod, devuelve Markdown",
+        "BaseIngestor.resolve_path(source, project_root) expande ~, resuelve relativos a project_root, lanza FileNotFoundError si no existe",
+        "Typecheck passes",
+        "Tests pass: test_base_ingestor cubre resolve_path con absoluto, relativo, ~, e inexistente"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Implementar MarkdownIngestor",
+      "description": "Como usuario, quiero que el ingestor de Markdown lea un .md asumiendo UTF-8 y devuelva su contenido tal cual para reusarlo en multi-fuente.",
+      "acceptanceCriteria": [
+        "Crear epub_generator/ingestors/markdown_ingestor.py con clase MarkdownIngestor(BaseIngestor)",
+        "extract() lee el archivo via resolve_path() en UTF-8 y devuelve el texto sin transformacion",
+        "Registrar 'markdown': MarkdownIngestor en INGESTORS",
+        "Typecheck passes",
+        "Tests pass: test_markdown_ingestor con fixture sample.md verifica contenido devuelto"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Implementar PdfIngestor con pypdf",
+      "description": "Como usuario, quiero ingerir PDFs locales para combinarlos con otros materiales en un mismo libro.",
+      "acceptanceCriteria": [
+        "Agregar pypdf a requirements.txt",
+        "Crear epub_generator/ingestors/pdf_ingestor.py con clase PdfIngestor(BaseIngestor)",
+        "extract() usa pypdf.PdfReader, itera paginas y concatena con doble salto de linea",
+        "Paginas sin texto extraible (PDF escaneado) se loguean como warning y se omiten, no rompen la extraccion",
+        "Imagenes embebidas se ignoran silenciosamente (limitacion documentada en docstring)",
+        "Registrar 'pdf': PdfIngestor en INGESTORS",
+        "Typecheck passes",
+        "Tests pass: test_pdf_ingestor con fixture sample.pdf (texto extraible, 2-3 paginas)"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Crear epub_generator/compiler.py con compile_book() — validacion temprana",
+      "description": "Como desarrollador, necesito la fase de validacion del compilador para fallar rapido si algun source esta mal definido antes de gastar tiempo en ingestion.",
+      "acceptanceCriteria": [
+        "Crear epub_generator/compiler.py con funcion publica compile_book(config: BookConfig, basename: str) -> Path",
+        "Funcion interna _validate_sources(sources, project_root) corre ANTES de cualquier ingestion",
+        "Validacion comprueba: type esta en INGESTORS, campos requeridos por type (url/youtube requieren 'url'; resto requiere 'path'), paths existen tras expanduser/resolve",
+        "Cualquier fallo de validacion lanza ValueError con mensaje claro indicando indice de la fuente y motivo",
+        "Si config.sources esta vacio, compile_book lanza ValueError 'No hay sources definidos'",
+        "Typecheck passes",
+        "Tests pass: test_compiler_validation cubre type invalido, campo ausente, path inexistente, sources vacio"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Completar compile_book() — orquestacion, ensamblaje y on_error",
+      "description": "Como usuario, quiero que el compilador ejecute los ingestors en orden, inyecte cabeceras H1 y maneje errores segun source.on_error para producir el Master Markdown.",
+      "acceptanceCriteria": [
+        "compile_book itera config.sources en orden y llama INGESTORS[source.type]().extract()",
+        "Si source.title definido y el contenido NO empieza por una cabecera del nivel indicado, inyectar `# title` (o `## title` segun title_level) al inicio",
+        "Si source.title vacio, generar default: basename del path o dominio de la URL, e inyectarlo como H1",
+        "Concatenar todas las fuentes con doble salto de linea (sin separador `---`; las cabeceras hacen el trabajo)",
+        "Si extract() lanza excepcion: si source.on_error=='skip' loguear warning y continuar; si =='abort' propagar",
+        "Logging por fuente: `[basename] (i/N) ingiriendo {type}: {path or url}`",
+        "Escribir resultado en libros_draft/{basename}_compiled.md (UTF-8) y devolver el Path",
+        "Typecheck passes",
+        "Tests pass: test_compiler cubre md+pdf, inyeccion/no-duplicado de cabecera, on_error=skip vs abort, archivo escrito en ruta esperada"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Adaptar _resolve_input y _process_book para aceptar .yaml como entrada",
+      "description": "Como usuario, quiero poder pasar git-libro.yaml directamente al CLI cuando declara sources, en vez de tener que mantener un .md placeholder.",
+      "acceptanceCriteria": [
+        "_resolve_input acepta paths con sufijo .yaml: si existe, devolverlo tal cual",
+        "load_config(input_path) detecta cuando input_path es .yaml y lo lee directamente (en lugar de derivarlo del .md)",
+        "_process_book deriva basename con input_path.stem como hasta ahora; entrada git-libro.yaml produce salida git-libro.epub (NO git-libro_compiled.epub)",
+        "Si input es .md tradicional sin sources, comportamiento identico al actual (regresion)",
+        "Typecheck passes",
+        "Tests pass: test_resolve_input cubre .md, .yaml con sources, .yaml inexistente; test de regresion verifica que .md sin yaml asociado sigue funcionando"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Auto-descubrimiento de .yaml con sources en main() con dedup por stem",
+      "description": "Como usuario, cuando ejecuto `python generate_epub.py` sin argumentos quiero que tambien descubra los .yaml multi-fuente, sin duplicar libros que tengan tanto .md como .yaml.",
+      "acceptanceCriteria": [
+        "main() amplia el glob a *.yaml ademas de los INPUT_EXTENSIONS actuales",
+        "Filtro: solo se aceptan .yaml que cargan como BookConfig con sources no vacio (los YAML sidecar de configuracion pura asociados a un .md NO entran como punto de entrada)",
+        "Dedup por stem: si existen git-libro.yaml (con sources) y git-libro.md, el .yaml gana y el .md se descarta del listado",
+        "El log inicial '📚 Descubiertos N libros...' refleja el conteo correcto tras dedup",
+        "Typecheck passes",
+        "Tests pass: test_main_discovery cubre solo md, solo yaml-con-sources, ambos coexistiendo (yaml gana), yaml sidecar sin sources (no entra)"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Integrar compile_book en _process_book antes de generate()",
+      "description": "Como desarrollador, necesito que _process_book invoque compile_book cuando el config tiene sources para que el .md compilado alimente al converter existente sin tocar generator.py.",
+      "acceptanceCriteria": [
+        "En _process_book: si config.sources no esta vacio, llamar compile_book(config, basename) y usar el Path devuelto como input para generate()",
+        "Si config.sources esta vacio, comportamiento exactamente igual que hoy (input_path original pasa a generate())",
+        "El nombre de salida sigue siendo {basename}.epub independientemente de si se uso compile_book",
+        "Logging anuncia '🧩 Compilando N fuentes...' antes de invocar compile_book",
+        "Typecheck passes",
+        "Tests de regresion pass: generar EPUB de un libro existente sin sources (ej. fundamentos-ia-libro) produce el mismo binario que en main (comparar hash o tamanho con tolerancia)"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Implementar UrlIngestor con requests + BeautifulSoup + markdownify",
+      "description": "Como usuario, quiero declarar URLs como fuentes para incorporar articulos web a mis libros sin descargarlos manualmente.",
+      "acceptanceCriteria": [
+        "Agregar requests, beautifulsoup4, markdownify a requirements.txt",
+        "Crear epub_generator/ingestors/url_ingestor.py con clase UrlIngestor(BaseIngestor)",
+        "extract() hace requests.get(source.url, timeout=10) con User-Agent personalizado",
+        "Si HTTP falla o timeout: respeta source.on_error (skip => warning + return ''; abort => raise)",
+        "BeautifulSoup parsea el HTML; si source.selector definido, filtrar por ese CSS selector; sino, body completo",
+        "Eliminar tags ruido: script, style, nav, footer, aside antes de convertir",
+        "markdownify convierte el HTML resultante a Markdown",
+        "Imagenes que no se puedan descargar/incrustar se sustituyen por `[Ver imagen en la fuente original]({url})`",
+        "Registrar 'url': UrlIngestor en INGESTORS",
+        "Typecheck passes",
+        "Tests pass: test_url_ingestor con HTTP mockeado (responses o pytest-httpserver) cubre selector aplicado, eliminacion de scripts, fallback de imagen, timeout con on_error"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Implementar EpubIngestor con ebooklib",
+      "description": "Como usuario, quiero ingerir EPUBs externos para combinar capitulos de libros existentes en uno nuevo.",
+      "acceptanceCriteria": [
+        "Agregar ebooklib a requirements.txt",
+        "Crear epub_generator/ingestors/epub_ingestor.py con clase EpubIngestor(BaseIngestor)",
+        "extract() abre el EPUB con ebooklib.epub.read_epub(), itera items en orden de spine que sean EpubHtml",
+        "Cada capitulo HTML se convierte a Markdown via markdownify",
+        "Capitulos se concatenan con doble salto de linea entre ellos",
+        "Imagenes referenciadas en el EPUB que no se puedan resolver se sustituyen por `[Imagen omitida: {nombre}]`",
+        "Registrar 'epub': EpubIngestor en INGESTORS",
+        "Typecheck passes",
+        "Tests pass: test_epub_ingestor con fixture sample.epub (2 capitulos) verifica orden de spine y conversion a Markdown"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Test E2E multi-fuente: YAML con md+pdf+url genera EPUB valido",
+      "description": "Como QA, necesito un test end-to-end que ejercite el flujo completo (validacion, compilacion, conversion a EPUB) para detectar regresiones de integracion.",
+      "acceptanceCriteria": [
+        "Crear tests/test_e2e_multisource.py con un YAML temporal que declara: 1 source markdown (fixture), 1 source pdf (fixture), 1 source url (HTTP mockeado)",
+        "El test ejecuta el flujo via _process_book (o equivalente publico) y verifica: archivo .epub generado existe, _compiled.md generado existe y contiene contenido de las 3 fuentes en orden, EPUB se abre con ebooklib sin errores y contiene >=3 capitulos H1",
+        "Verifica regresion: un YAML sin sources (con su .md asociado) sigue produciendo EPUB equivalente al baseline",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

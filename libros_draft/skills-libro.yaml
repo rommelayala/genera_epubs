@@ -6,3 +6,7 @@ date: "2026"
 cover:
   title: "Skills de IA"
   subtitle: "De la Teoría al Poder Real"
+
+sources:
+  - type: markdown
+    path: libros_draft/skills-libro.md

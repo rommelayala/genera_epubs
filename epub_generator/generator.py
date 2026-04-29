@@ -33,6 +33,20 @@ def generate(
             f"Combinación no soportada: entrada='{input_path.suffix}' formato='{output_format}'"
         )
     if output_format == "audio":
+        print("DEBUG: =============== LIBRO DE AUDIO =================================")
+        print(f"DEBUG: Input path: {input_path}")
+        print(f"DEBUG: Config: {config}")
+        print(f"DEBUG: Cover: {cover}")
+        print(f"DEBUG: Output: {output}")
+        print(f"DEBUG: Output format: {output_format}")
+        print("DEBUG: ==================================================")
         converter(input_path, config, cover, output, no_cache=no_cache)  # type: ignore[call-arg]
     else:
+        print("DEBUG: =============== LIBRO DE TEXTO =================================")
+        print(f"DEBUG: Input path: {input_path}")
+        print(f"DEBUG: Config: {config}")
+        print(f"DEBUG: Cover: {cover}")
+        print(f"DEBUG: Output: {output}")
+        print(f"DEBUG: Output format: {output_format}")
+        print("DEBUG: ==================================================")
         converter(input_path, config, cover, output)  # type: ignore[call-arg]

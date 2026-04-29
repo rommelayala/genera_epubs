@@ -1,33 +1,36 @@
 {
   "project": "genera_epubs",
-  "branchName": "ralph/audiobook-improvements",
-  "description": "Mejoras completas al sistema de audiolibros — TTS paralelo, chapter markers, portada embebida, limpieza de texto, configuracion por libro, cache y intro/outro automatico",
+  "branchName": "ralph/multi-source-compiler",
+  "description": "Compilador Multi-Fuente — extender genera_epubs para que un YAML pueda declarar multiples fuentes (Markdown, PDF, URL, EPUB) e ingerirlas en un Master Markdown que alimenta al pipeline existente sin romper la compatibilidad. Plan: docs/tasks/plan_compilador_multifuente.md. Fases 1 y 2 (Fase 3 video/audio queda diferida).",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Agregar AudioConfig dataclass a config.py",
-      "description": "Como desarrollador, necesito la dataclass AudioConfig en config.py para que los demas stories puedan leer configuracion de audio desde el YAML sidecar.",
+      "title": "Agregar SourceConfig dataclass y campo sources a BookConfig en config.py",
+      "description": "Como desarrollador, necesito el dataclass SourceConfig y el campo sources en BookConfig para que load_config pueda parsear la lista de fuentes desde el YAML.",
       "acceptanceCriteria": [
-        "Agregar dataclass AudioConfig en epub_generator/config.py con campos: voice (default: ''), rate (default: '-5%'), volume (default: '+0%'), pitch (default: '+0Hz'), bitrate (default: '96k'), chapter_pause (default: 1.5), concurrency (default: 5), intro (default: true), outro (default: true)",
-        "Agregar campo audio: AudioConfig en BookConfig con field(default_factory=AudioConfig)",
-        "En load_config(), parsear seccion audio: del YAML sidecar igual que se parsea cover: (con _build_audio helper)",
-        "Si la seccion audio: no existe en el YAML, usar defaults de AudioConfig",
-        "Typecheck passes"
+        "SourceConfig dataclass con campos: type (str), path (str=''), url (str=''), selector (str=''), transcription_service (str='whisper'), prefer_subtitles (bool=True), title (str=''), title_level (int=1), on_error (str='skip')",
+        "BookConfig agrega `sources: list[SourceConfig] = field(default_factory=list)`",
+        "Helper `_build_sources(data: list[dict]) -> list[SourceConfig]` siguiendo el patron existente de _build_audio/_build_cover",
+        "load_config() invoca _build_sources con data.get('sources', []) or []",
+        "YAML sin sources sigue funcionando (lista vacia por defecto)",
+        "Typecheck passes",
+        "Tests pass: test_config carga YAML con sources de cada tipo"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Esta es la base de datos de configuracion que usan US-002 a US-012. Debe completarse primero."
+      "notes": ""
     },
     {
       "id": "US-002",
-      "title": "Requerir ffmpeg y ffprobe al inicio de convert_audio",
-      "description": "Como usuario, quiero un error claro al inicio si ffmpeg no esta instalado, en lugar de que falle a mitad del proceso.",
+      "title": "Crear modulo epub_generator/ingestors/ con BaseIngestor y registry",
+      "description": "Como desarrollador, necesito el esqueleto del modulo de ingestors con clase abstracta y registry para que las implementaciones concretas se registren de forma uniforme.",
       "acceptanceCriteria": [
-        "Al inicio de convert_audio() en audio.py, verificar que ffmpeg y ffprobe estan en PATH usando shutil.which()",
-        "Si no estan disponibles, lanzar RuntimeError con mensaje: 'ffmpeg y ffprobe son requeridos para generar audiolibros. Instala con: brew install ffmpeg / sudo apt install ffmpeg'",
-        "En generate_epub.sh, agregar check de ffmpeg similar al check de pandoc (seccion nueva entre check de ebook-convert y check de fonts)",
-        "Eliminar el check condicional de shutil.which('ffmpeg') que existe dentro de _assemble_m4b (ya no es necesario porque se valida al inicio)",
-        "Typecheck passes"
+        "Crear epub_generator/ingestors/__init__.py exportando dict INGESTORS = {} (se ira poblando en stories siguientes)",
+        "Crear epub_generator/ingestors/base.py con BaseIngestor(ABC)",
+        "BaseIngestor.extract(source: SourceConfig, project_root: Path) -> str es abstractmethod, devuelve Markdown",
+        "BaseIngestor.resolve_path(source, project_root) expande ~, resuelve relativos a project_root, lanza FileNotFoundError si no existe",
+        "Typecheck passes",
+        "Tests pass: test_base_ingestor cubre resolve_path con absoluto, relativo, ~, e inexistente"
       ],
       "priority": 2,
       "passes": true,
@@ -35,14 +38,14 @@
     },
     {
       "id": "US-003",
-      "title": "Limpiar frontmatter YAML del texto antes de TTS",
-      "description": "Como oyente, no quiero escuchar el frontmatter YAML narrado al inicio del libro.",
+      "title": "Implementar MarkdownIngestor",
+      "description": "Como usuario, quiero que el ingestor de Markdown lea un .md asumiendo UTF-8 y devuelva su contenido tal cual para reusarlo en multi-fuente.",
       "acceptanceCriteria": [
-        "En markdown_cleaner.py, agregar funcion strip_frontmatter(text: str) -> str que elimine el bloque YAML frontmatter (---\\n...\\n---) del inicio del texto",
-        "La funcion solo elimina el frontmatter si esta al inicio del texto (posicion 0 o con whitespace antes)",
-        "No afecta separadores horizontales --- que aparezcan despues del inicio del documento",
-        "Llamar strip_frontmatter() al inicio de extract_chapters() antes de buscar headings",
-        "Typecheck passes"
+        "Crear epub_generator/ingestors/markdown_ingestor.py con clase MarkdownIngestor(BaseIngestor)",
+        "extract() lee el archivo via resolve_path() en UTF-8 y devuelve el texto sin transformacion",
+        "Registrar 'markdown': MarkdownIngestor en INGESTORS",
+        "Typecheck passes",
+        "Tests pass: test_markdown_ingestor con fixture sample.md verifica contenido devuelto"
       ],
       "priority": 3,
       "passes": true,
@@ -50,14 +53,17 @@
     },
     {
       "id": "US-004",
-      "title": "Limpiar emojis y caracteres especiales para TTS",
-      "description": "Como oyente, no quiero que el narrador diga nombres de emojis o caracteres unicode decorativos.",
+      "title": "Implementar PdfIngestor con pypdf",
+      "description": "Como usuario, quiero ingerir PDFs locales para combinarlos con otros materiales en un mismo libro.",
       "acceptanceCriteria": [
-        "En markdown_cleaner.py, agregar en clean_for_tts() un paso que elimine emojis unicode (usar regex con rangos: U+1F600-U+1F64F, U+1F300-U+1F5FF, U+1F680-U+1F6FF, U+1F1E0-U+1F1FF, U+2600-U+26FF, U+2700-U+27BF, U+FE00-U+FE0F, U+1F900-U+1F9FF, U+200D)",
-        "Eliminar caracteres decorativos unicode: flechas (U+2190-U+21FF), bullets decorativos, simbolos matematicos que no aportan",
-        "Preservar caracteres hispanicos: tildes, ene, signos de interrogacion/exclamacion invertidos, comillas espanolas",
-        "Agregar el paso despues de la limpieza de HTML tags y antes de colapsar lineas vacias",
-        "Typecheck passes"
+        "Agregar pypdf a requirements.txt",
+        "Crear epub_generator/ingestors/pdf_ingestor.py con clase PdfIngestor(BaseIngestor)",
+        "extract() usa pypdf.PdfReader, itera paginas y concatena con doble salto de linea",
+        "Paginas sin texto extraible (PDF escaneado) se loguean como warning y se omiten, no rompen la extraccion",
+        "Imagenes embebidas se ignoran silenciosamente (limitacion documentada en docstring)",
+        "Registrar 'pdf': PdfIngestor en INGESTORS",
+        "Typecheck passes",
+        "Tests pass: test_pdf_ingestor con fixture sample.pdf (texto extraible, 2-3 paginas)"
       ],
       "priority": 4,
       "passes": true,
@@ -65,14 +71,16 @@
     },
     {
       "id": "US-005",
-      "title": "Limpiar URLs sueltas para TTS",
-      "description": "Como oyente, no quiero que el narrador deletree URLs completas caracter por caracter.",
+      "title": "Crear epub_generator/compiler.py con compile_book() — validacion temprana",
+      "description": "Como desarrollador, necesito la fase de validacion del compilador para fallar rapido si algun source esta mal definido antes de gastar tiempo en ingestion.",
       "acceptanceCriteria": [
-        "En markdown_cleaner.py, agregar en clean_for_tts() un paso que detecte URLs sueltas con regex (https?://[^\\s)]+) que NO esten dentro de sintaxis markdown [texto](url)",
-        "Reemplazar URLs sueltas por cadena vacia (eliminarlas silenciosamente)",
-        "Agregar el paso DESPUES de limpiar links markdown (que ya remueve [texto](url) quedandose con texto) para no interferir",
-        "URLs dentro de bloques de codigo ya fueron reemplazadas por CODE_REDIRECT asi que no requieren tratamiento",
-        "Typecheck passes"
+        "Crear epub_generator/compiler.py con funcion publica compile_book(config: BookConfig, basename: str) -> Path",
+        "Funcion interna _validate_sources(sources, project_root) corre ANTES de cualquier ingestion",
+        "Validacion comprueba: type esta en INGESTORS, campos requeridos por type (url/youtube requieren 'url'; resto requiere 'path'), paths existen tras expanduser/resolve",
+        "Cualquier fallo de validacion lanza ValueError con mensaje claro indicando indice de la fuente y motivo",
+        "Si config.sources esta vacio, compile_book lanza ValueError 'No hay sources definidos'",
+        "Typecheck passes",
+        "Tests pass: test_compiler_validation cubre type invalido, campo ausente, path inexistente, sources vacio"
       ],
       "priority": 5,
       "passes": true,
@@ -80,120 +88,141 @@
     },
     {
       "id": "US-006",
-      "title": "Paralelizar sintesis TTS con asyncio.gather",
-      "description": "Como usuario, quiero que los capitulos se narren en paralelo para reducir el tiempo de generacion de 20x a ~4x.",
+      "title": "Completar compile_book() — orquestacion, ensamblaje y on_error",
+      "description": "Como usuario, quiero que el compilador ejecute los ingestors en orden, inyecte cabeceras H1 y maneje errores segun source.on_error para producir el Master Markdown.",
       "acceptanceCriteria": [
-        "En audio.py, refactorizar _chapter_to_mp3 para que sea una funcion async (renombrar a _chapter_to_mp3_async)",
-        "Crear una funcion async _synthesize_all(chapters, voice, output_dir, concurrency) que use asyncio.Semaphore(concurrency) y asyncio.gather() para narrar capitulos en paralelo",
-        "Leer concurrency desde config.audio.concurrency (default 5 definido en US-001)",
-        "En convert_audio(), reemplazar el loop secuencial por un unico asyncio.run(_synthesize_all(...))",
-        "Mostrar progreso en log: 'Narrando capitulo X de N: {title}'",
-        "Si un capitulo falla, los demas continuan. Reportar errores al final con log.error",
-        "El type hint de la funcion que antes retornaba Path | None ahora retorna Path | None correctamente",
-        "Typecheck passes"
+        "compile_book itera config.sources en orden y llama INGESTORS[source.type]().extract()",
+        "Si source.title definido y el contenido NO empieza por una cabecera del nivel indicado, inyectar `# title` (o `## title` segun title_level) al inicio",
+        "Si source.title vacio, generar default: basename del path o dominio de la URL, e inyectarlo como H1",
+        "Concatenar todas las fuentes con doble salto de linea (sin separador `---`; las cabeceras hacen el trabajo)",
+        "Si extract() lanza excepcion: si source.on_error=='skip' loguear warning y continuar; si =='abort' propagar",
+        "Logging por fuente: `[basename] (i/N) ingiriendo {type}: {path or url}`",
+        "Escribir resultado en libros_draft/{basename}_compiled.md (UTF-8) y devolver el Path",
+        "Typecheck passes",
+        "Tests pass: test_compiler cubre md+pdf, inyeccion/no-duplicado de cabecera, on_error=skip vs abort, archivo escrito en ruta esperada"
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Depende de US-001 para leer config.audio.concurrency"
+      "notes": ""
     },
     {
       "id": "US-007",
-      "title": "Pasar voz, rate, volume y pitch configurables a edge-tts",
-      "description": "Como autor, quiero configurar la voz y parametros de narracion del audiolibro desde el YAML.",
+      "title": "Adaptar _resolve_input y _process_book para aceptar .yaml como entrada",
+      "description": "Como usuario, quiero poder pasar git-libro.yaml directamente al CLI cuando declara sources, en vez de tener que mantener un .md placeholder.",
       "acceptanceCriteria": [
-        "En audio.py, leer config.audio.voice, config.audio.rate, config.audio.volume, config.audio.pitch",
-        "Si config.audio.voice esta vacio, usar el mapeo automatico por idioma existente (SUPPORTED_VOICES)",
-        "Pasar rate, volume y pitch a edge_tts.Communicate(): edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)",
-        "Eliminar el import redundante de re dentro de _slugify (ya se importa al inicio del archivo)",
-        "Typecheck passes"
+        "_resolve_input acepta paths con sufijo .yaml: si existe, devolverlo tal cual",
+        "load_config(input_path) detecta cuando input_path es .yaml y lo lee directamente (en lugar de derivarlo del .md)",
+        "_process_book deriva basename con input_path.stem como hasta ahora; entrada git-libro.yaml produce salida git-libro.epub (NO git-libro_compiled.epub)",
+        "Si input es .md tradicional sin sources, comportamiento identico al actual (regresion)",
+        "Typecheck passes",
+        "Tests pass: test_resolve_input cubre .md, .yaml con sources, .yaml inexistente; test de regresion verifica que .md sin yaml asociado sigue funcionando"
       ],
       "priority": 7,
       "passes": true,
-      "notes": "Depende de US-001 para AudioConfig"
+      "notes": ""
     },
     {
       "id": "US-008",
-      "title": "Chapter markers reales en M4B con ffprobe",
-      "description": "Como oyente, quiero navegar entre capitulos en mi reproductor de audiolibros.",
+      "title": "Auto-descubrimiento de .yaml con sources en main() con dedup por stem",
+      "description": "Como usuario, cuando ejecuto `python generate_epub.py` sin argumentos quiero que tambien descubra los .yaml multi-fuente, sin duplicar libros que tengan tanto .md como .yaml.",
       "acceptanceCriteria": [
-        "Crear funcion _get_duration_ms(mp3_path: Path) -> int que use ffprobe para obtener duracion en milisegundos: ffprobe -v error -show_entries format=duration -of csv=p=0 {path}",
-        "Crear funcion _generate_chapter_metadata(mp3_files: list[Path], chapter_titles: list[str], pause_ms: int) -> str que genere el contenido del archivo de metadata ffmpeg con entries [CHAPTER] con TIMEBASE=1/1000, START, END y title",
-        "Los timestamps deben sumar correctamente considerando las pausas entre capitulos (pause_ms del config.audio.chapter_pause * 1000)",
-        "En _assemble_m4b, escribir el metadata a un archivo temporal, y pasar -i metadata.txt -map_metadata 1 al comando ffmpeg",
-        "Limpiar el archivo de metadata temporal despues del ensamblado",
-        "Typecheck passes"
+        "main() amplia el glob a *.yaml ademas de los INPUT_EXTENSIONS actuales",
+        "Filtro: solo se aceptan .yaml que cargan como BookConfig con sources no vacio (los YAML sidecar de configuracion pura asociados a un .md NO entran como punto de entrada)",
+        "Dedup por stem: si existen git-libro.yaml (con sources) y git-libro.md, el .yaml gana y el .md se descarta del listado",
+        "El log inicial '📚 Descubiertos N libros...' refleja el conteo correcto tras dedup",
+        "Typecheck passes",
+        "Tests pass: test_main_discovery cubre solo md, solo yaml-con-sources, ambos coexistiendo (yaml gana), yaml sidecar sin sources (no entra)"
       ],
       "priority": 8,
       "passes": true,
-      "notes": "Depende de US-002 (ffprobe disponible)"
+      "notes": ""
     },
     {
       "id": "US-009",
-      "title": "Portada embebida y pausas entre capitulos en M4B",
-      "description": "Como oyente, quiero ver la portada del libro y escuchar pausas naturales entre capitulos.",
+      "title": "Integrar compile_book en _process_book antes de generate()",
+      "description": "Como desarrollador, necesito que _process_book invoque compile_book cuando el config tiene sources para que el .md compilado alimente al converter existente sin tocar generator.py.",
       "acceptanceCriteria": [
-        "En convert_audio(), dejar de ignorar el parametro cover: renombrar _cover a cover",
-        "En _assemble_m4b, si cover existe y es JPG o PNG, agregar al comando ffmpeg: -i {cover} -map 0:a -map 1:v -c:v mjpeg -disposition:v attached_pic (usar -c:v png si la portada es PNG)",
-        "Si cover no existe, omitir la portada con warning en log pero continuar el ensamblado",
-        "Generar archivo de silencio temporal con ffmpeg: ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t {chapter_pause} -q:a 9 silence.mp3",
-        "En concat.txt, intercalar el archivo de silencio entre cada par de capitulos",
-        "Leer chapter_pause desde config.audio.chapter_pause (default 1.5s de US-001)",
-        "Cambiar bitrate de -b:a 64k a -b:a {config.audio.bitrate} (default 96k de US-001)",
-        "Limpiar archivo de silencio temporal despues del ensamblado",
-        "Typecheck passes"
+        "En _process_book: si config.sources no esta vacio, llamar compile_book(config, basename) y usar el Path devuelto como input para generate()",
+        "Si config.sources esta vacio, comportamiento exactamente igual que hoy (input_path original pasa a generate())",
+        "El nombre de salida sigue siendo {basename}.epub independientemente de si se uso compile_book",
+        "Logging anuncia '🧩 Compilando N fuentes...' antes de invocar compile_book",
+        "Typecheck passes",
+        "Tests de regresion pass: generar EPUB de un libro existente sin sources (ej. fundamentos-ia-libro) produce el mismo binario que en main (comparar hash o tamanho con tolerancia)"
       ],
       "priority": 9,
       "passes": true,
-      "notes": "Implementado por Ralph en US-008 (portada, pausas, bitrate ya estaban en _assemble_m4b)"
+      "notes": ""
     },
     {
       "id": "US-010",
-      "title": "Intro y outro narrados automaticos",
-      "description": "Como oyente, quiero que el audiolibro comience con una introduccion y termine con un cierre narrado.",
+      "title": "Implementar UrlIngestor con requests + BeautifulSoup + markdownify",
+      "description": "Como usuario, quiero declarar URLs como fuentes para incorporar articulos web a mis libros sin descargarlos manualmente.",
       "acceptanceCriteria": [
-        "Si config.audio.intro es true (default), generar texto: 'Este es el audiolibro: {config.title}. Escrito por {config.author}. {config.description}' y narrarlo como 00_intro.mp3",
-        "Si config.audio.outro es true (default), generar texto: 'Fin del audiolibro: {config.title}. Gracias por escuchar.' y narrarlo como archivo outro MP3",
-        "Insertar intro al inicio y outro al final de la lista de mp3_files antes de pasar a _assemble_m4b",
-        "Incluir intro y outro en los chapter markers del M4B con titulos 'Introduccion' y 'Cierre'",
-        "Si intro u outro es false en el YAML, omitir el correspondiente",
-        "Typecheck passes"
+        "Agregar requests, beautifulsoup4, markdownify a requirements.txt",
+        "Crear epub_generator/ingestors/url_ingestor.py con clase UrlIngestor(BaseIngestor)",
+        "extract() hace requests.get(source.url, timeout=10) con User-Agent personalizado",
+        "Si HTTP falla o timeout: respeta source.on_error (skip => warning + return ''; abort => raise)",
+        "BeautifulSoup parsea el HTML; si source.selector definido, filtrar por ese CSS selector; sino, body completo",
+        "Eliminar tags ruido: script, style, nav, footer, aside antes de convertir",
+        "markdownify convierte el HTML resultante a Markdown",
+        "Imagenes que no se puedan descargar/incrustar se sustituyen por `[Ver imagen en la fuente original]({url})`",
+        "Registrar 'url': UrlIngestor en INGESTORS",
+        "Typecheck passes",
+        "Tests pass: test_url_ingestor con HTTP mockeado (responses o pytest-httpserver) cubre selector aplicado, eliminacion de scripts, fallback de imagen, timeout con on_error"
       ],
       "priority": 10,
       "passes": true,
-      "notes": "Implementado manualmente: _synthesize_intro_outro() en audio.py"
+      "notes": ""
     },
     {
       "id": "US-011",
-      "title": "Cache por capitulo con manifiesto JSON",
-      "description": "Como usuario, quiero que al re-generar un audiolibro tras editar un solo capitulo, solo se re-narre ese capitulo.",
+      "title": "Implementar EpubIngestor con ebooklib",
+      "description": "Como usuario, quiero ingerir EPUBs externos para combinar capitulos de libros existentes en uno nuevo.",
       "acceptanceCriteria": [
-        "Crear/leer archivo {chapters_dir}/cache_manifest.json con estructura: {filename: {hash: sha256_hex, duration_ms: int}}",
-        "Antes de narrar un capitulo, calcular SHA-256 del texto limpio (resultado de clean_for_tts, no del markdown original)",
-        "Si el hash coincide con el del manifiesto Y el archivo MP3 existe en disco, saltar la narracion y logear 'Capitulo X sin cambios, usando cache'",
-        "Si el hash no coincide o el MP3 no existe, narrar y actualizar la entrada en el manifiesto",
-        "Guardar el manifiesto actualizado al disco despues de procesar todos los capitulos",
-        "Agregar argumento --no-cache a argparse en generate_epub.py que ignore el manifiesto y re-narre todo",
-        "Pasar el flag no_cache a convert_audio() y a _process_book()",
-        "Typecheck passes"
+        "Agregar ebooklib a requirements.txt",
+        "Crear epub_generator/ingestors/epub_ingestor.py con clase EpubIngestor(BaseIngestor)",
+        "extract() abre el EPUB con ebooklib.epub.read_epub(), itera items en orden de spine que sean EpubHtml",
+        "Cada capitulo HTML se convierte a Markdown via markdownify",
+        "Capitulos se concatenan con doble salto de linea entre ellos",
+        "Imagenes referenciadas en el EPUB que no se puedan resolver se sustituyen por `[Imagen omitida: {nombre}]`",
+        "Registrar 'epub': EpubIngestor en INGESTORS",
+        "Typecheck passes",
+        "Tests pass: test_epub_ingestor con fixture sample.epub (2 capitulos) verifica orden de spine y conversion a Markdown"
       ],
       "priority": 11,
       "passes": true,
-      "notes": "Implementado manualmente: _synthesize_with_cache() con SHA-256 + --no-cache en CLI"
+      "notes": ""
     },
     {
       "id": "US-012",
-      "title": "Documentar configuracion de audio en README",
-      "description": "Como usuario, quiero saber que opciones de audio puedo configurar en el YAML sidecar.",
+      "title": "Test E2E multi-fuente: YAML con md+pdf+url genera EPUB valido",
+      "description": "Como QA, necesito un test end-to-end que ejercite el flujo completo (validacion, compilacion, conversion a EPUB) para detectar regresiones de integracion.",
       "acceptanceCriteria": [
-        "Agregar seccion 'Configuracion de audio (YAML sidecar)' en README.MD despues de la seccion de configuracion de portadas",
-        "Incluir ejemplo YAML con todos los campos de audio: voice, rate, volume, pitch, bitrate, chapter_pause, concurrency, intro, outro",
-        "Explicar los defaults y por que se eligieron (best practices de audiolibros)",
-        "Incluir ejemplo de uso con --format audio y --no-cache",
-        "Typecheck passes"
+        "Crear tests/test_e2e_multisource.py con un YAML temporal que declara: 1 source markdown (fixture), 1 source pdf (fixture), 1 source url (HTTP mockeado)",
+        "El test ejecuta el flujo via _process_book (o equivalente publico) y verifica: archivo .epub generado existe, _compiled.md generado existe y contiene contenido de las 3 fuentes en orden, EPUB se abre con ebooklib sin errores y contiene >=3 capitulos H1",
+        "Verifica regresion: un YAML sin sources (con su .md asociado) sigue produciendo EPUB equivalente al baseline",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 12,
       "passes": true,
-      "notes": "Implementado manualmente: seccion Audiolibros completa en README.MD"
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Implementar OllamaPdfIngestor visual agnóstico",
+      "description": "Como usuario, quiero extraer contenido de PDFs usando un modelo VLM local (ej. qwen3.5) para preservar tablas y formatos de forma agnóstica.",
+      "acceptanceCriteria": [
+        "Agregar pymupdf a requirements.txt",
+        "Modificar generate_epub.py para aceptar flag --ai-model opcional",
+        "Actualizar BookConfig para almacenar ai_model",
+        "Crear OllamaPdfIngestor que use PyMuPDF para renderizar páginas a PNG",
+        "Hacer POST a http://localhost:11434/api/generate con imagen Base64 y modelo inyectado",
+        "Registrar 'ollama_pdf' en INGESTORS"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": ""
     }
   ]
 }

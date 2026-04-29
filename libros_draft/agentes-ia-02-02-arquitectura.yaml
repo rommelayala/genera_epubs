@@ -1,0 +1,75 @@
+title: Capítulo 2: Arquitectura de Agentes
+author: Rommel Ayala
+language: es-ES
+date: 2026-04-27
+cover:
+  title: "Capítulo 2"
+  subtitle: "Arquitectura de Agentes"
+content: |
+  # Capítulo 2: Arquitectura de Agentes
+
+  ## Modelos de arquitectura
+
+  ### 1. Monolítico (Single-Agent)
+
+  Un único modelo LLM ejecuta todas las tareas:
+
+  ```python
+  class SimpleAgent:
+      def __init__(self, llm):
+          self.llm = llm
+          self.memory = []
+
+      def step(self, observation):
+          thought = self.llm.generate("¿Qué debo hacer?", self.memory)
+          action = self.execute(thought)
+          self.memory.append(action)
+          return action
+  ```
+
+  ### 2. Planificador-Ejecutor (Planner-Executor)
+
+  Separa la planificación de la ejecución:
+
+  ```
+  ┌────────────────────────────────────────────────────┐
+  │                    Planner                         │
+  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐│
+  │  │ Goal        │──│Plan         │──│Tool Select. ││
+  │  └─────────────┘  └─────────────┘  └─────────────┘│
+  └────────────────────────────────────────────────────┘
+                    ▼
+              ┌─────────────┐
+              │ Executor    │
+              └─────────────┘
+  ```
+
+  ### 3. Multi-Agent (Team)
+
+  Varios agentes con roles especializados:
+
+  - **Writer**: Redactar contenido
+  - **Reviewer**: Revisar y mejorar
+  - **Editor**: Formatear y publicar
+
+  ### 4. Híbrido (Crew+AutoGen)
+
+  Combina la estructura de CrewAI con la orquestación de AutoGen.
+
+  ## Memoria y contexto
+
+  - **Short-term**: Conversación actual
+  - **Long-term**: Banco de conocimientos
+  - **Vector DB**: Para recuperación semántica
+
+  ## Herramientas
+
+  Los agentes pueden usar:
+
+  - API de IA (ChatGPT, Claude, etc.)
+  - Búsqueda web
+  - Acceso a archivos
+  - Ejecución de código
+  - Navegación web
+
+---
