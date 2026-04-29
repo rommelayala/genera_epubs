@@ -204,13 +204,15 @@ Digamos que eres CEO de una startup de análisis de logs.
 
 **Mes 1:** Necesitas que un modelo responda preguntas sobre logs de tu cliente. RAG + Ollama. Subes PDFs con documentación de logs. Listo en 3 horas.
 
-**Mes 4:** El modelo sigue diciendo "tonterías" en ciertos contextos. No capta la jerga de tu dominio. Haces fine-tuning con 500 conversaciones reales con clientes. Ahora el modelo "piensa" como un especialista en logs.
+**Mes 2:** Te das cuenta de que necesitas instrucciones muy específicas al modelo (output en JSON, pasos exactos, etc.). Cambias de LLaMA a Hermes porque es mejor siguiendo instrucciones estructuradas. Hermes produce JSON consistente sin que tengas que hacer prompt engineering complicado.
 
-**Mes 8:** Necesitas que el modelo sea 10x más rápido para servir a 1,000 usuarios. Destilas de tu modelo fine-tuneado (que es grande) a uno pequeño. Obtienes 90% de precisión en 1/10 del tiempo.
+**Mes 4:** El modelo sigue cometiendo errores en casos de borde. Haces fine-tuning de Hermes con 500 conversaciones reales con clientes. Ahora el modelo "piensa" como un especialista en logs Y sigue instrucciones perfectamente.
+
+**Mes 8:** Necesitas que el modelo sea 10x más rápido para servir a 1,000 usuarios. Destilas de tu modelo Hermes fine-tuneado a uno pequeño. Obtienes 90% de precisión en 1/10 del tiempo.
 
 **Mes 12:** Combinas tu modelo destilado especialista con otro modelo destilado especialista en anomalías. Tienes un super-modelo. Fusión de modelos.
 
-Este es el ciclo que aprenderás en este libro.
+Este es el ciclo que aprenderás en este libro. Y verás que la elección del modelo base (como Hermes) afecta todas las fases posteriores.
 
 ### 1.4 ¿Por qué tu GPU de 8 GB es suficiente?
 
@@ -339,26 +341,50 @@ Aquí están los mejores modelos para fine-tuning y destilación en GPUs de 8–
 - **Mejor para:** Producción, cuando necesitas velocidad.
 - **Desventaja:** No es tan destilable como Gemma.
 
+#### Hermes 3
+
+- **Tamaño:** 8B, 70B
+- **VRAM mínima:** 8B = 8 GB | 70B = 40 GB
+- **¿Por qué?** Entrenado por NousResearch específicamente para seguir instrucciones y razonamiento profundo. Excelente con tareas estructuradas. Fine-tuning limpio y predecible.
+- **Mejor para:** Proyectos que requieren exactitud en instrucciones, análisis paso-a-paso, generación estructurada (JSON, código formateado).
+- **Desventaja:** Comunidad más pequeña que Llama, pero creciendo rápidamente.
+- **Dato interesante:** Hermes 8B frecuentemente supera a Llama 2 13B en benchmarks de razonamiento. Muy subestimado.
+
+**Versiones de Hermes:**
+- **Hermes-2-Pro:** La versión anterior, sigue siendo muy buena
+- **Hermes-3:** La más reciente, mejoras en razonamiento y matemáticas
+- **Hermes-3-Llama-3.1-70B:** Si tu GPU lo permite (40+ GB), es una bestia
+
+**Patrón de uso recomendado:** Usa Hermes si necesitas que el modelo siga instrucciones muy específicas o produzca salidas estructuradas. Es más determinístico que otros modelos.
+
 ### 2.2 Matriz de decisión: ¿Cuál elijo?
 
 ```
 ¿Tu GPU tiene 8 GB?
-  → Sí → ¿Necesitas código?
-        → Sí → Phi 4 (4B)
-        → No  → Gemma 3 (7B)
-  → No (< 8 GB) → Gemma 3 (2B)
+  → Sí → ¿Necesitas instrucciones estructuradas?
+        → Sí → Hermes 8B
+        → No  → ¿Necesitas código?
+                → Sí → Phi 4 (4B)
+                → No  → Gemma 3 (7B) o LLaMA 3.2 (8B)
+  → No (< 8 GB) → Gemma 3 (2B) o LLaMA 3.2 (1B)
 
 ¿Tu GPU tiene 12+ GB?
   → Sí → ¿Necesitas máxima inteligencia?
-        → Sí → LLaMA 3.2 (8B) o Phi 4 (14B)
+        → Sí → LLaMA 3.2 (8B) o Phi 4 (14B) o Hermes (8B con espacio)
         → No  → Cualquiera de los anteriores
 
 ¿Tu GPU tiene 20+ GB?
-  → Sí → Qwen 3.5 (32B) o LLaMA 3.2 (70B)
+  → Sí → Qwen 3.5 (32B) o LLaMA 3.2 (70B) o Hermes-3 (70B)
   → Pero recuerda: para fine-tuning usa el modelo MENOR que sea viable
 ```
 
-**Mi recomendación personal para empezar:** LLaMA 3.2 (8B). No es porque sea el mejor. Es porque es el más documentado, tiene más ejemplos comunitarios, y los errores que encontres ya están resueltos en StackOverflow.
+**Mi recomendación personal para empezar:**
+
+Si quieres razonamiento y comunidad grande: **LLaMA 3.2 (8B)**
+
+Si quieres instrucciones limpias y salidas estructuradas: **Hermes 8B**
+
+Si quieres el mejor balance para tu primer proyecto: **Hermes 8B** (es subestimado y funciona mejor que esperarías)
 
 ### 2.3 Instalación paso a paso
 
@@ -407,8 +433,20 @@ Si no ves nada, Ollama no se instaló correctamente. Reinstala.
 
 #### Paso 3: Descargar tu primer modelo
 
+**Opción A: LLaMA (la estándar)**
 ```bash
 ollama pull llama2
+```
+
+**Opción B: Hermes (si prefieres instrucciones limpias)**
+```bash
+ollama pull hermes2-pro
+```
+
+**Opción C: Ambos** (si tienes espacio y quieres comparar)
+```bash
+ollama pull llama2
+ollama pull hermes2-pro
 ```
 
 Esto descarga el modelo. Dependiendo de tu conexión, tomará 5-30 minutos.
@@ -417,8 +455,14 @@ Esto descarga el modelo. Dependiendo de tu conexión, tomará 5-30 minutos.
 
 #### Paso 4: Ejecutar tu primer inference
 
+**Con LLaMA:**
 ```bash
 ollama run llama2 "¿Cuál es la capital de Francia?"
+```
+
+**Con Hermes:**
+```bash
+ollama run hermes2-pro "¿Cuál es la capital de Francia?"
 ```
 
 Deberías ver (después de 5-10 segundos):
