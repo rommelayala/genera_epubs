@@ -1,0 +1,21 @@
+title: "Entrena tu Propia IA en Local: Aprendizaje Autónomo con Recursos Limitados"
+author: "Rommel Ayala"
+description: "Guía práctica completa para entrenar, fine-tunear y mejorar modelos de IA localmente con GPU de 8-16GB. Aprende RAG, QLoRA, destilación de conocimiento, fusión de modelos y automatización de ciclos de mejora continua."
+language: "es-ES"
+date: "2026"
+
+cover:
+  title: "Entrena tu IA en Local"
+  subtitle: "Ciclo Autónomo de Mejora Continua"
+  bg_color: "#0d1117"
+  text_color: "#f0f6fc"
+  accent_color: "#58a6ff"
+  title_size: 48
+  subtitle_size: 26
+  footer: "© Rommel Ayala — Aprendizaje con Recursos Limitados"
+
+sources:
+  - type: markdown
+    path: libros_draft/entrena-tu-ia-local.md
+    title: "Contenido Completo del Libro"
+    title_level: 1
