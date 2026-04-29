@@ -1345,4 +1345,562 @@ En el Capítulo 3, crearemos tu primera base de conocimiento RAG. Subirás tus p
 
 ---
 
-**¿Continúo con el Capítulo 3 (RAG), o prefieres que revise/mejore algo de estos primeros dos capítulos?**
+# Capítulo 3 — RAG: Usa Tus Propios Datos Sin Reentrenamiento
+
+### 3.1 ¿Qué es RAG? La ilusión óptica más útil de la IA
+
+RAG = "Retrieval-Augmented Generation"
+
+**Traducción literal:** "Generación aumentada por recuperación"
+
+**Lo que significa:** antes de responder una pregunta, el modelo busca información relevante y se la pasa, para que responda basándose en eso.
+
+#### La analogía: el amigo experto en una biblioteca
+
+Sin RAG:
+```
+Tú: "¿Cuál es el capital social de mi empresa?"
+Amigo de memoria: "Creo que son $50,000... pero no estoy seguro"
+```
+
+Con RAG:
+```
+Tú: "¿Cuál es el capital social de mi empresa?"
+Amigo: "Espera, déjame buscar en nuestros documentos"
+[Abre carpeta, busca, encuentra PDF de constitución]
+Amigo: "Aquí está: son $50,000 exactos, firmado el 2020"
+```
+
+**Diferencia crítica:**
+- Sin RAG: el modelo solo confía en lo que aprendió durante entrenamiento
+- Con RAG: el modelo accede a información NUEVA y ACTUALIZADA
+
+#### Comparación: RAG vs Fine-tuning vs Destilación
+
+Recuerda la tabla del Capítulo 1. Aquí la contextualizamos con ejemplos:
+
+```
+Escenario: Tienes 10,000 PDFs de tu empresa que suben 50 nuevos cada día
+
+CON RAG:
+  - Día 1: Indexas los 10,000 PDFs
+  - Día 2: Suben 50 nuevos, los agregas al índice (5 minutos)
+  - Resultado: El modelo sabe del contenido nuevo automáticamente
+  - Tiempo: 0 entrenamiento
+
+CON FINE-TUNING:
+  - Día 1: Fine-túneas el modelo con 10,000 PDFs (5 horas)
+  - Día 2: Suben 50 nuevos, necesitas reentrenar (5 horas más)
+  - Resultado: Más "inteligente" pero requiere reentrenamiento
+  - Tiempo: 5 horas cada vez que hay datos nuevos
+
+CON DESTILACIÓN:
+  - Proceso de semanas
+  - Requiere modelo grande como referencia
+  - No es para datos que cambian diariamente
+```
+
+**Conclusión:** RAG es para cuando tus datos cambian frecuentemente o son muy específicos de tu dominio.
+
+### 3.2 Cómo funciona RAG por dentro (sin matemáticas complicadas)
+
+RAG tiene 3 pasos:
+
+#### Paso 1: Indexar (convertir documentos a vectores)
+
+Un documento NO se almacena como texto.
+
+Se convierte a **vectores** (listas de números).
+
+```
+Documento: "Python es un lenguaje de programación versátil"
+
+Convertido a vector (embeddings):
+[0.2, -0.5, 0.8, 0.1, -0.3, 0.9, 0.4, -0.1, ...]
+↑     ↑     ↑    ↑     ↑     ↑    ↑     ↑
+Estos números capturan el "significado" del documento
+```
+
+¿Cómo se crea el vector? Usas un modelo de embeddings (usualmente pequeño y rápido):
+- Sentence-Transformers
+- OpenAI Embeddings
+- Ollama (embeddings locales)
+
+**Analogía:** Es como traducir un documento a un idioma secreto que solo la computadora entiende, pero que mantiene el significado.
+
+#### Paso 2: Buscar (encontrar documentos similares)
+
+Cuando haces una pregunta, ocurre:
+
+```
+Pregunta: "¿Cómo instalo Python?"
+
+Paso 1: Convierte la pregunta a vector
+[0.1, -0.4, 0.7, 0.2, -0.2, 0.8, 0.3, -0.2, ...]
+
+Paso 2: Busca documentos cuyo vector es SIMILAR
+  - Doc1 (sobre instalar Python): similitud = 0.95 ✅ MUY similar
+  - Doc2 (sobre variables): similitud = 0.3 ❌ poco similar
+  - Doc3 (sobre loops): similitud = 0.25 ❌ poco similar
+
+Paso 3: Recupera los top 3 más similares
+```
+
+**¿Cómo se mide "similar"?** Usa "cosine similarity" (ángulo entre vectores). Si dos vectores apuntan en la misma dirección, son similares.
+
+#### Paso 3: Aumentar y generar (meter contexto al modelo)
+
+Finalmente, le pasas al modelo:
+
+```
+[Contexto recuperado de documentos]
+"Python es un lenguaje de programación versátil. Se instala desde python.org..."
+
+[Pregunta original]
+"¿Cómo instalo Python?"
+
+[Instrucción especial]
+"Responde basándote SOLO en el contexto anterior"
+```
+
+El modelo ve el contexto Y la pregunta, y responde con precisión.
+
+### 3.3 Herramientas para RAG: Elige tu camino
+
+Hay 3 caminos, de menor a mayor complejidad:
+
+#### Opción 1: AnythingLLM (la más fácil, interfaz gráfica)
+
+**Pros:**
+- No necesitas escribir código
+- Interfaz visual, arrastrar y soltar
+- Soporta Ollama integrado
+- Funciona con cualquier modelo local
+
+**Contras:**
+- Menos personalizable
+- Rendimiento no optimizado para casos extremos
+- Vendor lock-in (dependes de su plataforma)
+
+**Mejor para:** Prototiping rápido, no técnicos, pruebas.
+
+#### Opción 2: LangChain (código, muy popular)
+
+**Pros:**
+- Flexible, personalizable
+- Excelente documentación
+- Integra todo (modelos, vectores, búsqueda)
+- Comunidad enorme
+
+**Contras:**
+- Requiere escribir código
+- Curva de aprendizaje moderada
+- A veces overhead innecesario
+
+**Mejor para:** Producción, control fino, desarrolladores.
+
+#### Opción 3: LlamaIndex (código, específico para RAG)
+
+**Pros:**
+- Diseñado específicamente para RAG
+- Muy rápido
+- Excelente manejo de índices
+
+**Contras:**
+- Comunidad más pequeña que LangChain
+- Documentación a veces incompleta
+
+**Mejor para:** Proyectos RAG puros, alto rendimiento.
+
+**Mi recomendación:** Comienza con AnythingLLM, luego aprende LangChain cuando necesites más control.
+
+### 3.4 Instalación y configuración de AnythingLLM
+
+#### Paso 1: Descargar AnythingLLM
+
+Ve a: https://anythingllm.com/
+
+Descarga la versión desktop (no cloud).
+
+#### Paso 2: Instalar
+
+**Windows:**
+1. Ejecuta el instalador `.exe`
+2. Sigue los pasos
+3. Abre la aplicación
+
+**Mac:**
+1. Abre el DMG
+2. Arrastra a Applications
+3. Abre desde Applications
+
+**Linux:**
+```bash
+npm install -g @mintplex-labs/anything-llm
+anything-llm  # Abre interfaz en http://localhost:3001
+```
+
+#### Paso 3: Configuración inicial
+
+Cuando abres AnythingLLM por primera vez:
+
+1. **Elige el modelo LLM:**
+   - Opciones → LLM Preference
+   - Selecciona "Ollama"
+   - Ingresa: `http://localhost:11434`
+   - Elige modelo (Hermes, LLaMA, etc.)
+
+2. **Elige el embeddings:**
+   - Opciones → Embeddings
+   - Selecciona "Ollama embeddings" O "Sentence Transformers" (local)
+   - Si usas Ollama: `http://localhost:11434`
+
+3. **Vector store:**
+   - Opciones → Vector Database
+   - Selecciona "LanceDB" (local, sin servidores externos)
+
+✅ **Listo.** Todo funciona sin internet, sin APIs pagadas.
+
+### 3.5 Crear tu primera base de conocimiento RAG
+
+Scenario: Tienes 5 PDFs sobre procesos internos de tu empresa. Quieres un chatbot que responda preguntas sobre ellos.
+
+#### Paso 1: Preparar documentos
+
+Organiza tus PDFs en una carpeta:
+```
+documentos_empresa/
+  ├── proceso_qa.pdf
+  ├── politica_vacaciones.pdf
+  ├── manual_seguridad.pdf
+  ├── estructura_organizacional.pdf
+  └── presupuesto_2024.pdf
+```
+
+⚠️ **Importante:** Los PDFs deben tener texto seleccionable, no solo imágenes escaneadas. Si son imágenes, necesitas OCR.
+
+#### Paso 2: Crear "Workspace" en AnythingLLM
+
+Un Workspace es una "colección de documentos + configuración".
+
+1. Abre AnythingLLM
+2. Haz clic en "New Workspace"
+3. Nombre: "Procesos Internos"
+4. Sistema Prompt (cómo comportarse el modelo):
+```
+Eres un asistente experto en procesos internos de nuestra empresa.
+Responde preguntas basándote SOLO en los documentos proporcionados.
+Si no encuentras la respuesta, di "No encontré esa información en nuestros documentos".
+Sé conciso y profesional.
+```
+
+#### Paso 3: Subir documentos
+
+1. Haz clic en el "+" en el Workspace
+2. Selecciona "Upload Document"
+3. Elige los PDFs de tu carpeta
+4. AnythingLLM automáticamente:
+   - Extrae texto
+   - Crea embeddings
+   - Indexa en el vector store
+
+⏳ **Espera:** Depende de tamaño. Para 5 PDFs medianos: 2-5 minutos.
+
+#### Paso 4: Probar RAG
+
+Una vez indexado, haz preguntas:
+
+```
+Tú: "¿Cuál es el proceso de vacaciones?"
+
+AnythingLLM internamente:
+1. Convierte pregunta a vector
+2. Busca documentos similares
+3. Encuentra: politica_vacaciones.pdf
+4. Lee: "Se otorgan 15 días al año. Solicitud 30 días antes..."
+5. Le pasa al modelo con el contexto
+6. El modelo responde:
+
+Respuesta: "Según nuestra política, se otorgan 15 días de vacaciones al año.
+Las solicitudes deben hacerse con 30 días de anticipación..."
+```
+
+✅ **Funciona.**
+
+### 3.6 Usando LangChain para RAG avanzado
+
+Si necesitas más control, aquí está el código equivalente en LangChain:
+
+```python
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings import OllamaEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.chat_models import ChatOllama
+from langchain.chains import RetrievalQA
+
+# 1. Cargar documentos
+docs = []
+for pdf in ["proceso_qa.pdf", "politica_vacaciones.pdf", "manual_seguridad.pdf"]:
+    loader = PyPDFLoader(pdf)
+    docs.extend(loader.load())
+
+# 2. Dividir documentos en chunks (partes pequeñas)
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,      # Cada fragmento: 500 caracteres
+    chunk_overlap=50,    # Solapamiento para no perder contexto
+)
+chunks = splitter.split_documents(docs)
+
+# 3. Crear embeddings (vectores)
+embeddings = OllamaEmbeddings(
+    model="nomic-embed-text",  # Modelo de embeddings
+    base_url="http://localhost:11434"
+)
+
+# 4. Crear vector store
+vectorstore = Chroma.from_documents(
+    documents=chunks,
+    embedding=embeddings,
+    persist_directory="./chroma_db"
+)
+
+# 5. Configurar modelo LLM
+llm = ChatOllama(
+    model="hermes2-pro",
+    base_url="http://localhost:11434"
+)
+
+# 6. Crear cadena RAG
+qa_chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    chain_type="stuff",  # Tipo de cadena
+    retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),  # Top 3 documentos
+)
+
+# 7. Hacer preguntas
+pregunta = "¿Cuál es el proceso de vacaciones?"
+respuesta = qa_chain.run(pregunta)
+print(respuesta)
+```
+
+**Qué hace este código:**
+1. Carga 3 PDFs
+2. Los divide en fragmentos pequeños (para precisión)
+3. Crea vectores de cada fragmento
+4. Guarda en una base de datos local (Chroma)
+5. Configura modelo Hermes
+6. Crea la cadena RAG
+7. Responde preguntas con contexto
+
+**Ventajas sobre AnythingLLM:**
+- Control fino sobre chunk_size, embeddings, etc.
+- Automatizable (puedes correrlo en un script)
+- Integrable en aplicaciones
+
+### 3.7 Evaluación: ¿Tu RAG funciona bien?
+
+No es suficiente "parece que funciona". Debes medir.
+
+#### Métrica 1: Relevancia de documentos recuperados
+
+Después de indexar, haz esta prueba:
+
+```python
+pregunta = "¿Cuál es el proceso de vacaciones?"
+docs_recuperados = vectorstore.similarity_search(pregunta, k=3)
+
+for doc in docs_recuperados:
+    print(f"Documento: {doc.metadata['source']}")
+    print(f"Relevancia: [HIGH/MEDIUM/LOW]")
+    print(f"Contenido: {doc.page_content[:200]}...")
+```
+
+✅ **Esperado:** Los 3 documentos mencionan "vacaciones"
+
+❌ **Problema:** Si recupera documentos irrelevantes, necesitas:
+- Mejor modelo de embeddings
+- Ajustar chunk_size
+- Agregar más contexto
+
+#### Métrica 2: Precisión de respuestas
+
+Crea un pequeño test set:
+
+```python
+test_cases = [
+    {
+        "pregunta": "¿Cuál es el proceso de vacaciones?",
+        "respuesta_esperada": "15 días al año",
+    },
+    {
+        "pregunta": "¿Quién es el CEO?",
+        "respuesta_esperada": "Juan García",
+    },
+]
+
+correctas = 0
+for test in test_cases:
+    respuesta = qa_chain.run(test["pregunta"])
+    if test["respuesta_esperada"].lower() in respuesta.lower():
+        correctas += 1
+
+precision = (correctas / len(test_cases)) * 100
+print(f"Precisión: {precision}%")
+```
+
+✅ **Esperado:** 80%+ precisión
+
+❌ **Si es bajo:** Mejora con fine-tuning (Capítulo 4)
+
+#### Métrica 3: Tiempo de respuesta
+
+```python
+import time
+
+inicio = time.time()
+respuesta = qa_chain.run("Tu pregunta")
+fin = time.time()
+
+tiempo_ms = (fin - inicio) * 1000
+print(f"Tiempo de respuesta: {tiempo_ms:.0f}ms")
+```
+
+✅ **Esperado:** 500-3000ms dependiendo de modelo
+
+❌ **Si es muy lento:** Usa modelo más pequeño o mejor hardware
+
+### 3.8 Mejoras prácticas para RAG
+
+#### Mejora 1: Aumentar documentos relevantes
+
+Si RAG dice "no encontré información", el problema es documentos:
+
+```python
+# Opción A: Agregar más documentos
+# Sube más PDFs al Workspace
+
+# Opción B: Mejorar extracción de texto
+# Si los PDFs tienen imágenes, usa OCR (tesseract + langchain)
+
+from langchain.document_loaders import OCRDocumentLoader
+loader = OCRDocumentLoader("documento_escaneado.pdf")
+docs = loader.load()
+```
+
+#### Mejora 2: Aumentar contexto (chunk_overlap)
+
+Si el modelo pierde contexto entre fragmentos:
+
+```python
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,
+    chunk_overlap=100,  # Aumentado de 50 a 100
+)
+```
+
+#### Mejora 3: Recuperar más documentos
+
+Si necesita más contexto:
+
+```python
+retriever = vectorstore.as_retriever(
+    search_kwargs={"k": 5}  # Top 5 en lugar de 3
+)
+```
+
+⚠️ **Advertencia:** Más documentos = más contexto = respuestas más lentas y a veces confusas.
+
+#### Mejora 4: Usar modelo de embeddings mejor
+
+Si la recuperación es imprecisa:
+
+```python
+# Opción A: Sentence-Transformers (mejor calidad, requiere más VRAM)
+from langchain.embeddings.sentence_transformer import SentenceTransformerEmbeddings
+embeddings = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+
+# Opción B: Ollama con modelo mejor
+embeddings = OllamaEmbeddings(
+    model="nomic-embed-text",  # Mejor que por defecto
+    base_url="http://localhost:11434"
+)
+```
+
+### 3.9 Caso de uso real: RAG para documentación técnica
+
+Escenario: Eres engineer en una startup. Tienes 200 markdown files de documentación. 5 nuevos cada día.
+
+**Problema sin RAG:**
+- Devs buscan en Google: "cómo usar X en nuestro código"
+- No encuentran, preguntan en Slack
+- Pierden 30 minutos esperando respuesta
+
+**Solución con RAG:**
+- Indexas toda la documentación
+- Devs preguntan al chatbot en Slack
+- Obtienen respuesta en 5 segundos
+
+**Implementación:**
+
+```python
+from langchain.document_loaders import DirectoryLoader
+from langchain.document_loaders import UnstructuredMarkdownLoader
+
+# 1. Cargar todos los markdown
+loader = DirectoryLoader(
+    "docs/",
+    glob="**/*.md",
+    loader_cls=UnstructuredMarkdownLoader
+)
+docs = loader.load()
+
+# 2. Crear RAG (resto igual a 3.6)
+# ... [código de RAG] ...
+
+# 3. Integrar con Slack (usando webhook)
+from slack_sdk import WebClient
+
+def responder_slack(pregunta):
+    respuesta = qa_chain.run(pregunta)
+    return respuesta
+
+# Cuando alguien usa /pregunta en Slack
+# Se ejecuta: responder_slack(pregunta) → devuelve respuesta
+```
+
+**Resultado:**
+- Documentación siempre actualizada
+- Búsqueda semántica (no solo palabras clave)
+- Ahorro de tiempo del equipo
+- Cero costo de infraestructura
+
+### 3.10 Próximo paso
+
+Ahora tienes:
+- ✅ Entiendes qué es RAG y cómo funciona
+- ✅ Puedes crear RAG en 10 minutos (AnythingLLM)
+- ✅ Sabes programar RAG en Python (LangChain)
+- ✅ Puedes evaluar si funciona bien
+- ✅ Conoces mejoras prácticas
+
+**El ciclo de mejora:**
+
+RAG es Fase 1 del ciclo. Pero RAG tiene limitaciones:
+
+```
+¿El modelo responde bien?
+  → Sí → Excelente, usa RAG. Fin.
+  → No → ¿El problema es documentos?
+           → Sí → Agrega documentos (soluciona)
+           → No → El modelo NO "piensa" como necesitas
+                   → Necesitas FINE-TUNING (Capítulo 4)
+```
+
+Si después de agregar documentos el modelo sigue equivocándose, necesitas entrenarlo.
+
+**En el Capítulo 4:** Aprenderás fine-tuning con QLoRA. Tomarás datos reales (conversaciones, casos de uso) y entrenarás el modelo para que "piense" como especialista en tu dominio.
+
+---
+
+**¿Continúo con el Capítulo 4 (Fine-tuning con QLoRA)?**
