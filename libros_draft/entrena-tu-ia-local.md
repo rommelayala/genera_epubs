@@ -1903,4 +1903,1984 @@ Si después de agregar documentos el modelo sigue equivocándose, necesitas entr
 
 ---
 
-**¿Continúo con el Capítulo 4 (Fine-tuning con QLoRA)?**
+# Capítulo 4 — Fine-tuning con QLoRA: Entrena sin Quebrar tu GPU
+
+### 4.1 El problema: Fine-tuning tradicional necesita demasiada VRAM
+
+Imagina que quieres entrenar un modelo de 7B parámetros.
+
+**Sin optimizaciones:**
+- VRAM necesaria: 40-60 GB
+- Tu GPU: 8-12 GB
+- Resultado: ❌ Out of Memory error
+
+**Con QLoRA:**
+- VRAM necesaria: 6-8 GB
+- Tu GPU: 8-12 GB
+- Resultado: ✅ Funciona
+
+¿Cómo es posible? QLoRA hace 3 cosas:
+
+1. **Cuantización de 4 bits:** El modelo se comprime. Pesa 1/4
+2. **Adaptadores LoRA:** Solo entrenas una pequeña parte (2-5% del modelo)
+3. **Gradient checkpointing:** Olvidas cálculos intermedios, los recalculas cuando necesitas
+
+Resultado: El modelo "aparentemente entero" pero optimizado para GPU pequeñas.
+
+### 4.2 Conceptos: Cuantización, LoRA, Gradientes
+
+#### Concepto 1: Cuantización (FP32 → INT4)
+
+Un parámetro del modelo normalmente es un número flotante de 32 bits:
+
+```
+FP32: 0.123456789012345
+      ↓ (divide entre 4)
+INT4: 0 (aproximación burda, pero suficiente)
+```
+
+Pierdes algo de precisión, pero:
+- El modelo es 4x más pequeño
+- Las respuestas son casi idénticas (90-95% de calidad)
+
+**Analogía:** Es como comprimir una foto JPEG. Pierdes píxeles, pero se ve casi igual.
+
+#### Concepto 2: LoRA (Low-Rank Adaptation)
+
+En lugar de actualizar todos los pesos del modelo durante entrenamiento:
+
+```
+Modelo original (7B parámetros):
+┌─────────────────────────────────┐
+│ Parámetro 1: 0.5                │
+│ Parámetro 2: -0.3               │
+│ Parámetro 3: 0.8                │
+│ ...                             │
+│ Parámetro 7B: 0.2               │
+└─────────────────────────────────┘
+
+Durante entrenamiento normal:
+Todos los 7B se actualizan. Costos: 60GB VRAM
+
+Con LoRA:
+┌─────────────────────────────────┐
+│ Modelo congelado (INMUTABLE)    │ ← Sin actualizar
+│ + Adaptador pequeño (LoRA)      │ ← Actualiza solo esto
+│   (0.1% del modelo)             │   (8GB VRAM)
+└─────────────────────────────────┘
+```
+
+**¿Qué es el "adaptador"?** Dos matrices pequeñas que se multiplican por los embeddings:
+
+```
+Input → [Matriz A (rango 8)] → [Matriz B (rango 8)] → Output
+        (mucho más pequeño que el modelo original)
+```
+
+**Resultado:** El modelo "aprende" cosas nuevas sin modificar el cerebro (pesos) original. Usa adaptadores como "enchufes" que amplifican el comportamiento existente.
+
+#### Concepto 3: Gradientes y Backpropagation
+
+Durante entrenamiento:
+
+```
+Datos de entrada
+    ↓
+Forward pass (modelo predice)
+    ↓
+Calcula loss (qué tan mal está)
+    ↓
+Backward pass (gradientes, cuánto cambiar cada peso)
+    ↓
+Actualiza pesos
+```
+
+El problema: el backward pass requiere guardar todos los cálculos intermedios. Para un modelo de 7B, es MUCHA memoria.
+
+**Gradient checkpointing:** No guardes todo. Recalcula cuando lo necesites:
+
+```
+En lugar de guardar 1000 valores intermedios (1GB memoria)
+Guarda 100 valores (100MB)
+Cuando haces backward, recalculas los 900 faltantes
+Costo: +10% tiempo, -90% memoria
+```
+
+### 4.3 Preparar tu dataset para fine-tuning
+
+El modelo aprende de ejemplos. Necesitas buenos ejemplos.
+
+#### Formato del dataset
+
+El formato estándar es JSON con estructura instrucción-respuesta:
+
+```json
+[
+  {
+    "instruction": "¿Cuál es el proceso de onboarding?",
+    "input": "",
+    "output": "El onboarding toma 3 semanas e incluye: 1) Entrenamiento técnico 2) Integración cultural 3) Asignación de mentor"
+  },
+  {
+    "instruction": "¿Cuántos días de vacaciones hay?",
+    "input": "",
+    "output": "15 días de vacaciones al año. Solicitar 30 días antes."
+  },
+  {
+    "instruction": "¿Cómo reporto un bug?",
+    "input": "He encontrado que el login no funciona en Safari",
+    "output": "Ve a jira.empresa.com, crea un issue en proyecto 'BUGS', incluye: navegador, OS, pasos para reproducir, captura de pantalla. Nuestro equipo lo revisa en 24h."
+  }
+]
+```
+
+**Estructura:**
+- `instruction`: La pregunta o tarea
+- `input`: Contexto adicional (opcional)
+- `output`: La respuesta correcta
+
+#### Cuántos ejemplos necesitas
+
+```
+Calidad de resultados vs Cantidad de ejemplos:
+
+50 ejemplos:     [###] Básico, cambios notables
+100 ejemplos:    [######] Bueno, especialidad clara
+500 ejemplos:    [#########] Muy bueno, experto evidente
+1000+ ejemplos:  [###########] Excelente, casi indistinguible de entrenamiento completo
+```
+
+**Regla práctica:**
+- Mínimo: 50 ejemplos (para ver si funciona)
+- Recomendado: 200-500 ejemplos (para producción)
+- Ideal: 1000+ ejemplos (dominio completo)
+
+**Importante:** 100 ejemplos LIMPIOS > 1000 ejemplos RUIDOSOS
+
+#### Limpiar y validar dataset
+
+Antes de entrenar, verifica:
+
+```python
+import json
+
+with open("dataset.json") as f:
+    datos = json.load(f)
+
+# Validación 1: ¿Todos tienen las 3 claves?
+for i, ejemplo in enumerate(datos):
+    assert "instruction" in ejemplo, f"Falta 'instruction' en {i}"
+    assert "output" in ejemplo, f"Falta 'output' en {i}"
+
+# Validación 2: ¿Ninguno está vacío?
+for i, ejemplo in enumerate(datos):
+    assert len(ejemplo["instruction"]) > 5, f"Instrucción muy corta en {i}"
+    assert len(ejemplo["output"]) > 10, f"Output muy corto en {i}"
+
+# Validación 3: ¿Hay duplicados?
+instrucciones = [e["instruction"] for e in datos]
+assert len(instrucciones) == len(set(instrucciones)), "Hay instrucciones duplicadas"
+
+print(f"✅ Dataset válido: {len(datos)} ejemplos")
+```
+
+### 4.4 Instalación de unsloth (acelera 2-3x)
+
+Unsloth es un fork optimizado de transformers. Hace fine-tuning 2-3x más rápido.
+
+```bash
+# Instalar unsloth
+pip install unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
+
+# Verificar instalación
+python -c "from unsloth import FastLanguageModel; print('✅ Unsloth instalado')"
+```
+
+### 4.5 Script completo: Fine-tuning de un modelo con QLoRA
+
+Aquí está el script que necesitas. Cópialo y adapta:
+
+```python
+# fine_tune_model.py
+
+from unsloth import FastLanguageModel
+import torch
+from datasets import Dataset, load_dataset
+from transformers import TrainingArguments
+from trl import SFTTrainer
+import json
+
+# ===== 1. CARGAR MODELO =====
+print("1️⃣ Cargando modelo...")
+
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="unsloth/hermes-2-pro-gguf",  # O cualquier modelo: llama, phi, etc.
+    max_seq_length=2048,
+    dtype=torch.float16,
+    load_in_4bit=True,  # Cuantización 4 bits
+)
+
+# ===== 2. APLICAR LORA =====
+print("2️⃣ Aplicando LoRA...")
+
+model = FastLanguageModel.get_peft_model(
+    model,
+    r=16,                          # Rango LoRA (8-64 típico)
+    lora_alpha=32,                 # Scaling
+    lora_dropout=0.05,             # Regularización
+    bias="none",
+    use_gradient_checkpointing="unsloth",  # Checkpointing
+    random_state=42,
+)
+
+# ===== 3. CARGAR DATASET =====
+print("3️⃣ Cargando dataset...")
+
+with open("dataset.json") as f:
+    datos = json.load(f)
+
+# Convertir a formato de cadena
+textos = []
+for d in datos:
+    # Formato estándar para Hermes
+    texto = f"""<|im_start|>user
+{d['instruction']}
+{d.get('input', '')}<|im_end|>
+<|im_start|>assistant
+{d['output']}<|im_end|>
+"""
+    textos.append({"text": texto})
+
+dataset = Dataset.from_dict({"text": textos})
+
+print(f"   Dataset: {len(dataset)} ejemplos")
+print(f"   Ejemplo 1: {dataset[0]['text'][:200]}...")
+
+# ===== 4. CONFIGURAR ENTRENAMIENTO =====
+print("4️⃣ Configurando entrenamiento...")
+
+training_args = TrainingArguments(
+    output_dir="./modelo_fine_tuned",
+    num_train_epochs=3,                    # 3 pasadas por datos
+    per_device_train_batch_size=4,         # Batch size (ajusta según VRAM)
+    gradient_accumulation_steps=2,         # Simula batch 8 con VRAM de 4
+    warmup_steps=100,                      # Calentar learning rate
+    weight_decay=0.01,                     # Regularización
+    learning_rate=5e-4,                    # Learning rate
+    logging_steps=10,                      # Log cada 10 pasos
+    save_steps=100,                        # Guardar checkpoint cada 100
+    save_total_limit=2,                    # Guardar solo 2 últimos checkpoints
+    optim="paged_adamw_8bit",              # Optimizer de 8 bits (ahorra VRAM)
+    seed=42,
+)
+
+# ===== 5. ENTRENAR =====
+print("5️⃣ Entrenando...")
+
+trainer = SFTTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=dataset,
+    dataset_text_field="text",
+    max_seq_length=2048,
+    args=training_args,
+)
+
+trainer.train()
+
+print("✅ Entrenamiento completado")
+
+# ===== 6. GUARDAR MODELO =====
+print("6️⃣ Guardando modelo...")
+
+model.save_pretrained("./mi_modelo_lora")
+tokenizer.save_pretrained("./mi_modelo_lora")
+
+print("✅ Modelo guardado en ./mi_modelo_lora")
+
+# ===== 7. PROBAR =====
+print("7️⃣ Probando modelo...")
+
+FastLanguageModel.for_inference(model)
+
+inputs = tokenizer(
+    ["<|im_start|>user\n¿Cuál es el proceso de vacaciones?\n<|im_end|>\n<|im_start|>assistant\n"],
+    return_tensors="pt",
+).to("cuda")
+
+outputs = model.generate(**inputs, max_new_tokens=200)
+respuesta = tokenizer.decode(outputs[0])
+
+print("RESPUESTA:")
+print(respuesta)
+```
+
+**Explicación línea por línea:**
+
+1. **Cargar modelo:** `FastLanguageModel.from_pretrained` con 4-bit (cuantización)
+2. **LoRA:** `get_peft_model` agrega adaptadores pequeños (r=16 es estándar)
+3. **Dataset:** JSON → Dataset de Hugging Face
+4. **Configuración:** TrainingArguments (epochs, batch_size, learning_rate)
+5. **Entrenamiento:** SFTTrainer es el trainer optimizado
+6. **Guardar:** Guarda LoRA (pequeño, ~100MB) + tokenizer
+7. **Probar:** Genera respuesta con modelo fine-tuneado
+
+**Ejecución:**
+
+```bash
+python fine_tune_model.py
+
+# Output esperado:
+# 1️⃣ Cargando modelo...
+# 2️⃣ Aplicando LoRA...
+# 3️⃣ Cargando dataset...
+#    Dataset: 150 ejemplos
+# 4️⃣ Configurando entrenamiento...
+# 5️⃣ Entrenando...
+#    [████████████████████] 100% - Epoch 3/3
+# ✅ Entrenamiento completado
+# ✅ Modelo guardado en ./mi_modelo_lora
+```
+
+### 4.6 Ajustes según tu VRAM
+
+Si se queda sin memoria, ajusta:
+
+```python
+# Opción 1: Batch size más pequeño
+per_device_train_batch_size=2,  # En lugar de 4
+
+# Opción 2: Secuencia más corta
+max_seq_length=1024,  # En lugar de 2048
+
+# Opción 3: LoRA más pequeño
+r=8,  # En lugar de 16
+
+# Opción 4: Todas las anteriores
+per_device_train_batch_size=2,
+max_seq_length=1024,
+r=8,
+gradient_accumulation_steps=4,  # Simula batch más grande
+```
+
+### 4.7 Importar modelo fine-tuneado a Ollama
+
+Una vez entrenado, queremos usarlo en Ollama.
+
+#### Paso 1: Fusionar LoRA con modelo base
+
+```python
+from peft import PeftModel
+from transformers import AutoModelForCausalLM
+
+# Cargar modelo base
+base_model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Llama-2-7b",  # Modelo base original
+    torch_dtype=torch.float16,
+    device_map="auto"
+)
+
+# Cargar LoRA
+modelo_fusionado = PeftModel.from_pretrained(
+    base_model,
+    "./mi_modelo_lora"
+)
+
+# Fusionar (LoRA + base = un solo modelo)
+modelo_fusionado = modelo_fusionado.merge_and_unload()
+
+# Guardar
+modelo_fusionado.save_pretrained("./modelo_final_fusionado")
+```
+
+#### Paso 2: Convertir a formato GGUF (para Ollama)
+
+```bash
+# Instalar llama-cpp-python
+pip install llama-cpp-python
+
+# Convertir a GGUF
+python -m llama_cpp.convert \
+  --model-dir ./modelo_final_fusionado \
+  --outfile ./modelo_final.gguf \
+  --outtype q4_k_m  # Cuantización para GPU (q4_k_m) o CPU (q5_k_m)
+```
+
+#### Paso 3: Agregar a Ollama
+
+```bash
+# Crear Modelfile
+cat > Modelfile << EOF
+FROM ./modelo_final.gguf
+PARAMETER temperature 0.7
+PARAMETER top_k 40
+PARAMETER top_p 0.9
+SYSTEM "Eres un asistente experto en nuestra empresa"
+EOF
+
+# Crear modelo en Ollama
+ollama create mi-modelo-entrenado -f Modelfile
+
+# Probar
+ollama run mi-modelo-entrenado "¿Cuál es el proceso de vacaciones?"
+```
+
+✅ **Tu modelo fine-tuneado ahora vive en Ollama.**
+
+### 4.8 Evaluación: ¿Mejoró el modelo?
+
+Crea un test set (datos que NO usaste en entrenamiento):
+
+```python
+test_cases = [
+    {
+        "pregunta": "¿Cuántos días de vacaciones?",
+        "respuesta_correcta": "15 días al año"
+    },
+    {
+        "pregunta": "¿Cómo reporto un bug?",
+        "respuesta_correcta": "Crea un issue en Jira"
+    },
+]
+
+# Antes del fine-tuning (modelo base)
+print("MODELO BASE:")
+for test in test_cases:
+    respuesta = modelo_base(test["pregunta"])
+    match = test["respuesta_correcta"].lower() in respuesta.lower()
+    print(f"  {test['pregunta']}: {'✅' if match else '❌'}")
+
+# Después del fine-tuning
+print("\nMODELO FINE-TUNEADO:")
+for test in test_cases:
+    respuesta = modelo_fine_tuned(test["pregunta"])
+    match = test["respuesta_correcta"].lower() in respuesta.lower()
+    print(f"  {test['pregunta']}: {'✅' if match else '❌'}")
+```
+
+✅ **Si ve más ✅ después, el fine-tuning funcionó.**
+
+### 4.9 Próximo paso
+
+Fine-tuning es Fase 2 del ciclo.
+
+```
+Fase 1: RAG (datos en contexto)
+Fase 2: Fine-tuning ← Aquí estás
+Fase 3: Destilación (comprime el modelo entrenado)
+Fase 4: Fusión (combina modelos especializados)
+Fase 5: Ciclo autónomo (mejora automática)
+```
+
+**Cuándo pasar a Fase 3:**
+
+- Fine-tuneaste exitosamente ✅
+- El modelo responde bien ✅
+- Pero es lento o grande para producción ❌
+- → Destila a modelo pequeño (Capítulo 5)
+
+---
+
+# Capítulo 5 — Destilación de Conocimiento: Modelo Grande → Pequeño
+
+### 5.1 El problema: Tu modelo es demasiado grande/lento
+
+Scenario: Fine-tuneaste un modelo de 70B parámetros. Funciona increíblemente bien. Pero:
+
+- Pesa 140 GB
+- Responde en 10 segundos (lento para producción)
+- No cabe en una GPU de consumo
+- Cuesta $1000/mes en inference en cloud
+
+**¿Qué si pudiera ser 10x más pequeño pero tan inteligente?**
+
+Eso es destilación.
+
+### 5.2 Concepto: Un modelo grande enseña a uno pequeño
+
+**Destilación** = transferencia de conocimiento de modelo grande a pequeño.
+
+#### Analogía: El maestro y el aprendiz
+
+```
+Maestro (70B):
+- Experto absoluto
+- Respuestas perfectas
+- Muy lento
+
+Aprendiz (7B):
+- Novato
+- Respuestas incorrectas
+- Muy rápido
+
+¿Qué pasa si el maestro enseña?
+Aprendiz aprende no solo respuestas, sino CÓMO PENSAR del maestro
+Resultado: Aprendiz casi tan bueno como maestro, pero sigue siendo rápido
+```
+
+#### ¿Cómo transfiere el conocimiento?
+
+A través de **soft labels** y **logits**.
+
+**Soft labels** = probabilidades, no respuestas binarias.
+
+```
+Modelo grande responde: "¿Cuántos días de vacaciones?"
+- Opción A (15 días): 95% confianza
+- Opción B (20 días): 3% confianza
+- Opción C (30 días): 2% confianza
+
+En lugar de solo decir "A", el modelo pequeño aprende esas probabilidades.
+Aprende no solo QUÉ responder, sino CUÁN SEGURO estar.
+```
+
+### 5.3 Proceso de destilación paso a paso
+
+#### Paso 1: Generar datos sintéticos (modelo grande genera respuestas)
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# Modelo grande (maestro)
+modelo_maestro = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-70b")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-70b")
+
+# Dataset de preguntas (sin respuestas)
+preguntas = [
+    "¿Cuál es el proceso de onboarding?",
+    "¿Cuántos días de vacaciones?",
+    "¿Cómo reporto un bug?",
+    # ... 1000 preguntas más
+]
+
+# Generar respuestas con modelo grande
+respuestas_maestro = []
+for pregunta in preguntas:
+    input_ids = tokenizer(pregunta, return_tensors="pt")
+    output_ids = modelo_maestro.generate(input_ids, max_new_tokens=100)
+    respuesta = tokenizer.decode(output_ids[0])
+    respuestas_maestro.append(respuesta)
+
+# Guardar dataset
+dataset_destilacion = [
+    {"pregunta": p, "respuesta": r}
+    for p, r in zip(preguntas, respuestas_maestro)
+]
+
+with open("dataset_destilacion.json", "w") as f:
+    json.dump(dataset_destilacion, f)
+```
+
+#### Paso 2: Entrenar modelo pequeño con soft labels
+
+El modelo pequeño aprende a "imitar" al grande:
+
+```python
+from unsloth import FastLanguageModel
+import torch
+from transformers import TrainingArguments
+from trl import SFTTrainer
+
+# Modelo pequeño (aprendiz)
+modelo_aprendiz, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="unsloth/phi-2-gguf",  # 2.7B parámetros
+    max_seq_length=2048,
+    dtype=torch.float16,
+    load_in_4bit=True,
+)
+
+# Aplicar LoRA
+modelo_aprendiz = FastLanguageModel.get_peft_model(
+    modelo_aprendiz,
+    r=16,
+    lora_alpha=32,
+    lora_dropout=0.05,
+    bias="none",
+)
+
+# Cargar dataset destilado
+with open("dataset_destilacion.json") as f:
+    datos = json.load(f)
+
+# Convertir a Dataset
+textos = [f"Q: {d['pregunta']}\nA: {d['respuesta']}" for d in datos]
+dataset = Dataset.from_dict({"text": textos})
+
+# Entrenar
+training_args = TrainingArguments(
+    output_dir="./phi_destilado",
+    num_train_epochs=5,              # Más épocas (aprendiz necesita repetición)
+    per_device_train_batch_size=4,
+    learning_rate=1e-4,              # Learning rate más bajo
+    logging_steps=10,
+    save_steps=100,
+)
+
+trainer = SFTTrainer(
+    model=modelo_aprendiz,
+    tokenizer=tokenizer,
+    train_dataset=dataset,
+    dataset_text_field="text",
+    max_seq_length=2048,
+    args=training_args,
+)
+
+trainer.train()
+print("✅ Destilación completada")
+```
+
+#### Paso 3: Evaluar (¿aprendió bien?)
+
+```python
+# Comparar respuestas
+test_preguntas = [
+    "¿Cuál es el proceso de onboarding?",
+    "¿Cuántos días de vacaciones?",
+]
+
+for pregunta in test_preguntas:
+    print(f"\nPregunta: {pregunta}")
+    
+    # Modelo maestro (referencia)
+    respuesta_maestro = modelo_maestro(pregunta)
+    print(f"Maestro: {respuesta_maestro}")
+    
+    # Modelo aprendiz destilado
+    respuesta_aprendiz = modelo_aprendiz(pregunta)
+    print(f"Aprendiz: {respuesta_aprendiz}")
+    
+    # Comparar similitud
+    similitud = comparar_similitud(respuesta_maestro, respuesta_aprendiz)
+    print(f"Similitud: {similitud:.0%}")
+```
+
+### 5.4 Temperatura y logits (los secretos de la destilación)
+
+**Temperatura** controla cómo "suave" o "dura" son las probabilidades.
+
+```
+Logits (antes de softmax):     [2.0, 1.0, 0.1]
+
+Temperatura baja (T=0.1):      softmax → [0.99, 0.01, 0.00]  (muy seguro)
+Temperatura normal (T=1.0):    softmax → [0.73, 0.27, 0.00]  (seguro)
+Temperatura alta (T=5.0):      softmax → [0.50, 0.33, 0.17]  (inseguro)
+
+Durante destilación:
+Usa T=5.0 para que el modelo grande sea "menos seguro"
+Esto permite que el modelo pequeño aprenda matices
+```
+
+### 5.5 Caso real: Destilar LLaMA 70B a Phi 2.7B
+
+```python
+# Configuración para destilación inteligente
+
+# Paso 1: Generar dataset con temperatura alta
+temperatura_destilacion = 4.0
+dataset = generar_respuestas_con_temperatura(
+    modelo_maestro=llama_70b,
+    preguntas=preguntas_dominio,
+    temperatura=temperatura_destilacion,
+    num_preguntas=1000,
+)
+
+# Paso 2: Entrenar Phi con learning rate bajo
+modelo_phi, _ = FastLanguageModel.from_pretrained("phi-2-7b")
+modelo_phi = FastLanguageModel.get_peft_model(modelo_phi, r=16)
+
+trainer = SFTTrainer(
+    model=modelo_phi,
+    train_dataset=dataset,
+    args=TrainingArguments(
+        learning_rate=5e-5,  # Muy bajo
+        num_train_epochs=10,
+        per_device_train_batch_size=2,
+    )
+)
+
+trainer.train()
+
+# Paso 3: Validar que Phi aprendió
+validar_destilacion(
+    modelo_maestro=llama_70b,
+    modelo_aprendiz=phi_destilado,
+    test_set=test_preguntas,
+    umbral_similitud=0.85,  # 85% de similitud mínimo
+)
+```
+
+### 5.6 Evaluación de destilación
+
+```python
+def evaluar_destilacion(maestro, aprendiz, test_set):
+    """
+    Compara maestro vs aprendiz
+    """
+    resultados = {
+        "coincidencias_exactas": 0,
+        "similitud_promedio": 0,
+        "tiempo_maestro_ms": 0,
+        "tiempo_aprendiz_ms": 0,
+    }
+    
+    for pregunta in test_set:
+        # Maestro
+        inicio = time.time()
+        resp_maestro = maestro(pregunta)
+        tiempo_maestro = (time.time() - inicio) * 1000
+        
+        # Aprendiz
+        inicio = time.time()
+        resp_aprendiz = aprendiz(pregunta)
+        tiempo_aprendiz = (time.time() - inicio) * 1000
+        
+        # Comparar
+        similitud = calcular_similitud(resp_maestro, resp_aprendiz)
+        resultados["similitud_promedio"] += similitud
+        resultados["tiempo_maestro_ms"] += tiempo_maestro
+        resultados["tiempo_aprendiz_ms"] += tiempo_aprendiz
+    
+    # Promedios
+    n = len(test_set)
+    print(f"Similitud promedio: {resultados['similitud_promedio']/n:.0%}")
+    print(f"Speedup: {resultados['tiempo_maestro_ms']/(resultados['tiempo_aprendiz_ms']+0.1):.1f}x")
+    
+    return resultados
+```
+
+✅ **Esperado:** 85-95% similitud, 5-10x más rápido
+
+### 5.7 Próximo paso
+
+Destilación es Fase 3. Ahora tienes:
+- Modelo pequeño
+- Rápido
+- Inteligente (aprendió del grande)
+
+**Pero:** Cada modelo sigue siendo especialista en su dominio.
+
+**Próximo paso:** Fusiona modelos especializados para obtener lo mejor de ambos (Capítulo 7).
+
+Pero antes, en Capítulo 6: Sistemas multi-agente. Cómo hacer que múltiples modelos colaboren.
+
+---
+
+# Capítulo 6 — Sistemas Multi-Agente con MCP: Modelos Colaborando
+
+### 6.1 El problema: Un modelo solo no es suficiente
+
+Tu modelo es bueno. Pero:
+
+- Para código, necesita ser especialista en programación
+- Para análisis de datos, necesita ser matemático
+- Para writing, necesita ser redactor
+
+**¿Qué si tuvieras 3 modelos, cada uno especialista, trabajando juntos?**
+
+Eso es multi-agente.
+
+### 6.2 ¿Qué es MCP? (Model Context Protocol)
+
+MCP es un protocolo estándar (creado por Anthropic) para que modelos se comuniquen.
+
+```
+Agent 1 (Investigador)    → Busca información
+    ↓ (vía MCP)
+Agent 2 (Redactor)        → Escribe basado en info
+    ↓ (vía MCP)
+Agent 3 (Crítico)         → Revisa calidad
+    ↓ (resultado final)
+Salida final
+```
+
+Cada agente es un modelo pequeño con herramientas específicas.
+
+### 6.3 Arquitectura de un sistema multi-agente
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Orquestador (Ray)                    │
+│  Coordina tareas, distribuye entre modelos              │
+└─────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────┐
+│                     Agent Layer                          │
+├──────────────────┬──────────────────┬──────────────────┤
+│  Investigador    │    Redactor      │    Crítico       │
+│  (LLaMA 8B)      │  (Phi 7B)        │  (Hermes 8B)     │
+│  Herramientas:   │  Herramientas:   │  Herramientas:   │
+│  - Wikipedia API │  - Grammar check │  - Evaluación    │
+│  - SearchAPI     │  - Formatting    │  - Metrics       │
+│  - Database      │  - Templates     │  - Test suite    │
+└──────────────────┴──────────────────┴──────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────┐
+│                    Tool Layer (MCP)                      │
+│  Provee herramientas que cada agente usa                │
+└─────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────┐
+│                    Recursos Externos                     │
+│  APIs, DBs, archivos, ejecutables                       │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 6.4 Ejemplo: Sistema de 3 agentes para análisis
+
+Tarea: Analizar un dataset de logs, escribir reporte, revisarlo.
+
+```python
+import ray
+from typing import List
+
+# Inicializar Ray (ya configurado en Capítulo 2)
+ray.init(address="auto")
+
+# ===== AGENT 1: INVESTIGADOR =====
+@ray.remote
+def agent_investigador(dataset_path: str) -> dict:
+    """
+    Busca patrones en los datos
+    """
+    import pandas as pd
+    
+    df = pd.read_csv(dataset_path)
+    
+    analisis = {
+        "total_registros": len(df),
+        "errores": df[df["nivel"] == "ERROR"].shape[0],
+        "patrones_principales": df.groupby("tipo").size().head(5).to_dict(),
+    }
+    
+    return analisis
+
+# ===== AGENT 2: REDACTOR =====
+@ray.remote
+def agent_redactor(analisis: dict) -> str:
+    """
+    Escribe el reporte basado en análisis
+    """
+    reporte = f"""
+    REPORTE DE ANÁLISIS DE LOGS
+    ============================
+    
+    Registros procesados: {analisis['total_registros']}
+    Errores encontrados: {analisis['errores']}
+    
+    Patrones principales:
+    {chr(10).join(f"  - {k}: {v}" for k, v in analisis['patrones_principales'].items())}
+    
+    RECOMENDACIONES:
+    1. Investigar patrones de error
+    2. Implementar alertas para errores frecuentes
+    3. Mejorar logging en módulos críticos
+    """
+    
+    return reporte
+
+# ===== AGENT 3: CRÍTICO =====
+@ray.remote
+def agent_critico(reporte: str) -> dict:
+    """
+    Revisa calidad del reporte
+    """
+    metricas = {
+        "longitud": len(reporte),
+        "tiene_recomendaciones": "RECOMENDACIONES" in reporte,
+        "es_legible": len(reporte.split("\n")) > 5,
+        "calidad": "BUENO" if "RECOMENDACIONES" in reporte else "MEJORABLE",
+    }
+    
+    return metricas
+
+# ===== ORQUESTADOR =====
+def procesar_logs(dataset_path: str):
+    """
+    Coordina los 3 agentes
+    """
+    print("🔍 Agent 1: Investigando...")
+    analisis_future = agent_investigador.remote(dataset_path)
+    
+    print("📝 Agent 2: Escribiendo...")
+    # Agent 2 espera a Agent 1
+    analisis = ray.get(analisis_future)
+    reporte_future = agent_redactor.remote(analisis)
+    
+    print("✅ Agent 3: Revisando...")
+    # Agent 3 espera a Agent 2
+    reporte = ray.get(reporte_future)
+    metricas_future = agent_critico.remote(reporte)
+    
+    # Resultado final
+    metricas = ray.get(metricas_future)
+    
+    print("\n" + reporte)
+    print("\nMÉTRICAS DE CALIDAD:")
+    for k, v in metricas.items():
+        print(f"  {k}: {v}")
+
+# Ejecutar
+procesar_logs("logs.csv")
+```
+
+**Flujo:**
+1. Agent 1 analiza datos
+2. Agent 2 escribe basado en análisis de Agent 1
+3. Agent 3 revisa calidad
+4. Resultado: reporte validado
+
+### 6.5 Modelos especializados en multi-agente
+
+Cada agente debería ser especialista:
+
+```
+Tarea: Desarrollar una API
+├─ Agent Planeador (Hermes): Diseña arquitectura
+├─ Agent Coder (Phi): Genera código
+├─ Agent Tester (LLaMA): Escribe tests
+└─ Agent Reviewer (Claude/GPT-4): Revisa todo
+```
+
+**¿Cómo asignar modelos?**
+
+```
+Tarea tipo         Modelo ideal
+─────────────────────────────────
+Análisis lógico   Phi (razonamiento)
+Código            Phi, Qwen
+Writing           Hermes, LLaMA (general)
+Matemáticas       Qwen, LLaMA
+Creatividad       LLaMA, Gemma
+```
+
+### 6.6 Comunicación entre agentes (MCP en detalle)
+
+MCP define cómo agentes comparten información:
+
+```python
+# Agent A genera output
+resultado_a = {
+    "tipo": "analisis_datos",
+    "contenido": {"errores": 42, "patrones": [...]},
+    "confianza": 0.92,
+    "timestamp": "2024-04-29T10:30:00",
+}
+
+# Agent B recibe vía MCP
+def procesar_resultado_a(mensaje_mcp: dict):
+    # Valida formato
+    assert "contenido" in mensaje_mcp
+    # Procesa
+    contenido = mensaje_mcp["contenido"]
+    # Continúa tarea
+    ...
+```
+
+### 6.7 Caso de uso: Sistema de QA automático
+
+Tarea: Generar preguntas de test automáticamente.
+
+```python
+@ray.remote
+def agent_generador_preguntas(documentacion: str) -> List[str]:
+    """Genera preguntas sobre la doc"""
+    prompt = f"""Lee esta documentación y genera 5 preguntas de test:
+    {documentacion}
+    
+    Formato: Una pregunta por línea"""
+    
+    preguntas = modelo.generate(prompt)
+    return preguntas.split("\n")
+
+@ray.remote
+def agent_generador_respuestas(preguntas: List[str], documentacion: str) -> List[dict]:
+    """Responde las preguntas basándose en doc"""
+    respuestas = []
+    for p in preguntas:
+        r = modelo_rag.query(p, documentacion)
+        respuestas.append({"pregunta": p, "respuesta": r})
+    return respuestas
+
+@ray.remote
+def agent_evaluador(qa_pares: List[dict]) -> float:
+    """Evalúa calidad de preguntas"""
+    puntuacion = 0
+    for par in qa_pares:
+        # ¿Tiene respuesta clara?
+        if len(par["respuesta"]) > 20:
+            puntuacion += 1
+    return puntuacion / len(qa_pares)
+
+# Orquestar
+doc = open("documentacion.md").read()
+preguntas_future = agent_generador_preguntas.remote(doc)
+preguntas = ray.get(preguntas_future)
+
+respuestas_future = agent_generador_respuestas.remote(preguntas, doc)
+respuestas = ray.get(respuestas_future)
+
+score_future = agent_evaluador.remote(respuestas)
+score = ray.get(score_future)
+
+print(f"Calidad: {score:.0%}")
+for par in respuestas[:3]:
+    print(f"\nP: {par['pregunta']}")
+    print(f"R: {par['respuesta']}")
+```
+
+### 6.8 Escalabilidad multi-agente
+
+Con Ray, agregar agentes es trivial:
+
+```python
+@ray.remote
+def agent_nuevo():
+    # Nuevas capacidades
+    pass
+
+# Simplemente agregalo al flujo
+resultado1 = agent_a.remote()
+resultado2 = agent_b.remote(resultado1)
+resultado3 = agent_nuevo.remote(resultado2)  # Nuevo agente
+resultado4 = agent_c.remote(resultado3)
+
+final = ray.get([resultado1, resultado2, resultado3, resultado4])
+```
+
+Ray automáticamente:
+- Lo ejecuta en la máquina más ociosa del cluster
+- Lo paraleliza si es posible
+- Maneja fallos
+
+---
+
+# Capítulo 7 — Fusión de Modelos: Combina Especialistas
+
+### 7.1 El problema: Cada modelo es especialista en una cosa
+
+- Modelo A: muy bueno en código
+- Modelo B: muy bueno en análisis
+- Modelo C: muy bueno en writing
+
+**¿Qué si los combinara en UNO?**
+
+Eso es fusión de modelos.
+
+### 7.2 Concepto: Fusión de pesos
+
+Fusión toma los pesos de 2+ modelos y los combina.
+
+```
+Modelo A (código):      w_a1, w_a2, w_a3, ...
+Modelo B (análisis):    w_b1, w_b2, w_b3, ...
+
+Fusión simple (promedio):
+w_fusión = (w_a + w_b) / 2
+
+Fusión ponderada (da peso a uno):
+w_fusión = 0.7 * w_a + 0.3 * w_b
+```
+
+### 7.3 Herramienta: mergekit
+
+mergekit es la herramienta estándar para fusión.
+
+```bash
+# Instalar
+pip install git+https://github.com/arcee-ai/mergekit.git
+
+# Crear config de fusión
+cat > config_fusión.yaml << EOF
+models:
+  - model: /camino/a/modelo_codigo
+    parameters:
+      weight: 0.7
+  - model: /camino/a/modelo_análisis
+    parameters:
+      weight: 0.3
+
+merge_method: linear
+EOF
+
+# Ejecutar fusión
+mergekit-cli merge config_fusión.yaml ./modelo_fusionado
+```
+
+### 7.4 Métodos de fusión disponibles
+
+```
+Método        Complejidad    Mejor para              Resultado
+─────────────────────────────────────────────────────────────────
+linear        Baja          Modelos similares       Promedio ponderado
+slerp         Baja          Modelos similares       Interpolación suave
+ties          Media         Modelos diferentes      Elimina ruido
+DARE          Alta          Fusión experta          Máxima calidad
+```
+
+### 7.5 Caso: Fusionar Phi (código) + Hermes (razonamiento)
+
+```yaml
+# config_fusión_phi_hermes.yaml
+models:
+  - model: unsloth/phi-2-gguf
+    parameters:
+      weight: 0.6
+      alpha: 0.5
+  - model: NousResearch/Hermes-2-Pro
+    parameters:
+      weight: 0.4
+      alpha: 0.5
+
+merge_method: slerp
+dtype: float16
+```
+
+Ejecutar:
+```bash
+mergekit-cli merge config_fusión_phi_hermes.yaml ./phi_hermes_fusionado
+
+# Resultado: modelo de ~8B que entiende código Y razonamiento
+```
+
+### 7.6 Evaluación de fusión
+
+```python
+def evaluar_fusión(modelo_a, modelo_b, modelo_fusionado, test_set):
+    """
+    Compara rendimiento
+    """
+    
+    for test in test_set:
+        # Modelo A
+        r_a = modelo_a(test["pregunta"])
+        
+        # Modelo B
+        r_b = modelo_b(test["pregunta"])
+        
+        # Modelo fusionado
+        r_fusionado = modelo_fusionado(test["pregunta"])
+        
+        # ¿Es mejor que cada uno?
+        mejora_a = similitud(r_fusionado, test["respuesta_correcta"]) > similitud(r_a, test["respuesta_correcta"])
+        mejora_b = similitud(r_fusionado, test["respuesta_correcta"]) > similitud(r_b, test["respuesta_correcta"])
+        
+        print(f"Mejora vs A: {mejora_a}, vs B: {mejora_b}")
+```
+
+### 7.7 Próximo paso
+
+Ahora tienes:
+- ✅ Modelos fine-tuneados
+- ✅ Modelos destilados
+- ✅ Sistemas multi-agente
+- ✅ Modelos fusionados
+
+**Próximo:** Automatizar todo (Capítulo 8)
+
+---
+
+# Capítulo 8 — Ciclo Autónomo: Tu IA se Mejora Sola
+
+### 8.1 El sueño: Inteligencia que mejora sin intervención
+
+```
+Lunes 8am:
+  Robot: "Nuevos datos llegaron"
+  Robot: "Fine-tuning iniciado"
+  [4 horas de entrenamiento]
+  
+  Robot: "Modelo mejorado"
+  Robot: "Destilando..."
+  [2 horas]
+  
+  Robot: "Fusionando..."
+  [1 hora]
+  
+  Robot: "Evaluando..."
+  [30 min]
+  
+  Robot: "Tú: tu modelo mejoró 8% esta semana. Reporte adjunto."
+
+Tú: "Cool 😎"
+```
+
+### 8.2 Arquitectura del ciclo autónomo
+
+```
+┌──────────────────────────────────────────────────┐
+│         Scheduler (APScheduler / Cron)           │
+│         Ejecuta cada semana (lunes 8am)          │
+└──────────────────────────────────────────────────┘
+    ↓
+┌──────────────────────────────────────────────────┐
+│  1. DETECTOR DE DATOS                            │
+│  "¿Hay datos nuevos desde última semana?"        │
+└──────────────────────────────────────────────────┘
+    ↓
+┌──────────────────────────────────────────────────┐
+│  2. ENTRENADOR (Fine-tuning)                     │
+│  Si hay datos: fine-túnea modelo                 │
+└──────────────────────────────────────────────────┘
+    ↓
+┌──────────────────────────────────────────────────┐
+│  3. DESTILADOR                                   │
+│  Comprime modelo grande a pequeño               │
+└──────────────────────────────────────────────────┘
+    ↓
+┌──────────────────────────────────────────────────┐
+│  4. EVALUADOR                                    │
+│  Compara viejo vs nuevo                          │
+└──────────────────────────────────────────────────┘
+    ↓
+┌──────────────────────────────────────────────────┐
+│  5. PUBLICADOR                                   │
+│  Si mejoró: reemplaza versión en producción     │
+└──────────────────────────────────────────────────┘
+    ↓
+┌──────────────────────────────────────────────────┐
+│  6. REPORTERO                                    │
+│  Envía reporte a Slack / email                  │
+└──────────────────────────────────────────────────┘
+```
+
+### 8.3 Script del ciclo completo
+
+```python
+# ciclo_autonomo.py
+
+import ray
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+import requests
+
+ray.init(address="auto")
+
+# ===== 1. DETECTOR =====
+@ray.remote
+def detector_datos():
+    """Busca datos nuevos en carpeta"""
+    datos_path = Path("datos_nuevos")
+    archivos = list(datos_path.glob("*.json"))
+    
+    print(f"📊 Detectados {len(archivos)} archivos nuevos")
+    return archivos
+
+# ===== 2. ENTRENADOR =====
+@ray.remote
+def entrenador(archivos):
+    """Fine-túnea modelo con datos nuevos"""
+    if not archivos:
+        print("⏭️ Sin datos nuevos, saltando fine-tuning")
+        return None
+    
+    print("🔧 Iniciando fine-tuning...")
+    
+    # Cargar datos
+    todos_datos = []
+    for archivo in archivos:
+        with open(archivo) as f:
+            todos_datos.extend(json.load(f))
+    
+    # Crear dataset
+    dataset = crear_dataset(todos_datos)
+    
+    # Fine-túnea (script del Capítulo 4)
+    modelo_finetuned = ejecutar_finetuning(dataset)
+    
+    print(f"✅ Fine-tuning completado: {len(todos_datos)} ejemplos")
+    
+    return modelo_finetuned
+
+# ===== 3. DESTILADOR =====
+@ray.remote
+def destilador(modelo_finetuned):
+    """Destila modelo grande a pequeño"""
+    if modelo_finetuned is None:
+        return None
+    
+    print("🫗 Destilando modelo...")
+    
+    # Genera respuestas con modelo grande
+    dataset_destilacion = generar_datos_destilacion(modelo_finetuned)
+    
+    # Entrena modelo pequeño
+    modelo_destilado = entrenar_destilacion(dataset_destilacion)
+    
+    print("✅ Destilación completada")
+    
+    return modelo_destilado
+
+# ===== 4. EVALUADOR =====
+@ray.remote
+def evaluador(modelo_viejo, modelo_nuevo):
+    """Compara rendimiento"""
+    if modelo_nuevo is None:
+        return {"mejora": 0, "valido": False}
+    
+    print("📊 Evaluando modelos...")
+    
+    # Test set
+    test_set = cargar_test_set()
+    
+    # Evaluar viejo
+    score_viejo = evaluar_modelo(modelo_viejo, test_set)
+    
+    # Evaluar nuevo
+    score_nuevo = evaluar_modelo(modelo_nuevo, test_set)
+    
+    mejora = (score_nuevo - score_viejo) / (score_viejo + 0.001) * 100
+    
+    print(f"  Viejo: {score_viejo:.2f}")
+    print(f"  Nuevo: {score_nuevo:.2f}")
+    print(f"  Mejora: {mejora:+.1f}%")
+    
+    return {
+        "mejora": mejora,
+        "valido": mejora > 0,  # Valido si mejoró
+        "score_viejo": score_viejo,
+        "score_nuevo": score_nuevo,
+    }
+
+# ===== 5. PUBLICADOR =====
+@ray.remote
+def publicador(modelo_nuevo, metricas_evaluacion):
+    """Reemplaza modelo en producción si mejoró"""
+    if not metricas_evaluacion["valido"]:
+        print("⏭️ Modelo no mejoró, no publicando")
+        return False
+    
+    print("🚀 Publicando modelo en producción...")
+    
+    # Guardar modelo nuevo
+    modelo_nuevo.save_pretrained("./modelos/produccion/latest")
+    
+    # Crear versión con timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    modelo_nuevo.save_pretrained(f"./modelos/archivo/{timestamp}")
+    
+    print(f"✅ Publicado: ./modelos/produccion/latest")
+    
+    return True
+
+# ===== 6. REPORTERO =====
+@ray.remote
+def reportero(metricas_evaluacion, mejora_publicada):
+    """Envía reporte a Slack"""
+    timestamp = datetime.now().isoformat()
+    
+    mensaje = f"""
+🤖 CICLO AUTÓNOMO COMPLETADO
+Timestamp: {timestamp}
+
+Métricas:
+  - Score anterior: {metricas_evaluacion['score_viejo']:.2f}
+  - Score nuevo: {metricas_evaluacion['score_nuevo']:.2f}
+  - Mejora: {metricas_evaluacion['mejora']:+.1f}%
+  - Publicado: {"Sí ✅" if mejora_publicada else "No ⏭️"}
+
+Próximo ciclo: próximo lunes 8am
+    """
+    
+    # Enviar a Slack
+    webhook_url = os.getenv("SLACK_WEBHOOK_URL")
+    if webhook_url:
+        requests.post(webhook_url, json={"text": mensaje})
+    
+    # Guardar en log
+    with open("ciclos_autonomos.log", "a") as f:
+        f.write(mensaje + "\n")
+    
+    print("📧 Reporte enviado")
+
+# ===== ORQUESTADOR =====
+@ray.remote
+def ciclo_completo():
+    """Ejecuta el ciclo entero"""
+    print("\n" + "="*50)
+    print("🔄 INICIANDO CICLO AUTÓNOMO")
+    print("="*50 + "\n")
+    
+    # 1. Detectar
+    archivos = ray.get(detector_datos.remote())
+    
+    # 2. Entrenar
+    modelo_finetuned = ray.get(entrenador.remote(archivos))
+    
+    # 3. Destilar
+    modelo_destilado = ray.get(destilador.remote(modelo_finetuned))
+    
+    # 4. Evaluar
+    modelo_viejo = cargar_modelo_produccion()
+    metricas = ray.get(evaluador.remote(modelo_viejo, modelo_destilado))
+    
+    # 5. Publicar
+    publicado = ray.get(publicador.remote(modelo_destilado, metricas))
+    
+    # 6. Reportar
+    ray.get(reportero.remote(metricas, publicado))
+    
+    print("\n" + "="*50)
+    print("✅ CICLO COMPLETADO")
+    print("="*50 + "\n")
+
+# ===== SCHEDULER =====
+if __name__ == "__main__":
+    from apscheduler.schedulers.background import BackgroundScheduler
+    import atexit
+    
+    # Programar para cada lunes a las 8am
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        func=lambda: ray.get(ciclo_completo.remote()),
+        trigger="cron",
+        day_of_week="mon",
+        hour=8,
+        minute=0,
+    )
+    
+    scheduler.start()
+    print("✅ Scheduler iniciado. Próximo ciclo: próximo lunes 8am")
+    
+    # Mantener scheduler corriendo
+    atexit.register(lambda: scheduler.shutdown())
+    
+    try:
+        import time
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n🛑 Detenido manualmente")
+```
+
+### 8.4 Monitoreo del ciclo
+
+```python
+# dashboard_ciclos.py
+
+def mostrar_dashboard():
+    """Visualiza histórico de ciclos"""
+    
+    with open("ciclos_autonomos.log") as f:
+        lineas = f.readlines()
+    
+    # Parse histórico
+    for bloque in " ".join(lineas).split("CICLO AUTÓNOMO"):
+        if "Score anterior:" in bloque:
+            # Extraer métricas
+            score_ant = float(extraer(bloque, "Score anterior: ", "\n"))
+            score_nuevo = float(extraer(bloque, "Score nuevo: ", "\n"))
+            mejora = float(extraer(bloque, "Mejora: ", "%"))
+            
+            print(f"{score_ant:.2f} → {score_nuevo:.2f} ({mejora:+.1f}%)")
+
+# Ejecutar dashboard
+mostrar_dashboard()
+```
+
+### 8.5 Próximo paso
+
+Ahora tienes:
+- ✅ Ciclo autónomo que corre cada semana
+- ✅ Detecta datos nuevos
+- ✅ Entrena automáticamente
+- ✅ Destila
+- ✅ Evalúa
+- ✅ Publica si mejoró
+- ✅ Reporta
+
+**El sueño:** Tu IA mejora cada semana sin que hagas nada. Eso es Capítulo 8 completado.
+
+**Próximo:** Capítulo 9. Proyecto integrador que usa TODO esto.
+
+---
+
+# Capítulo 9 — Proyecto Integrador Final: Sistema de IA Autónomo Completo
+
+### 9.1 El proyecto: Chatbot que entrena cada semana
+
+Vas a construir un sistema completo:
+
+```
+1. Usuario hace preguntas a un chatbot
+2. Cada pregunta + respuesta se guarda
+3. Cada lunes, el sistema:
+   - Toma conversaciones reales
+   - Fine-túnea el modelo
+   - Destila
+   - Evalúa
+   - Si mejoró, publica
+4. Semana siguiente: usuario nota que responde mejor
+```
+
+### 9.2 Requisitos del proyecto
+
+**Hardware:**
+- 1 GPU de 8+ GB (tu máquina principal)
+- 1+ máquina de cluster (cluster distribuido)
+- 32 GB RAM mínimo
+
+**Software:**
+- Ollama (con 2+ modelos)
+- LangChain (para RAG)
+- Ray (para distribución)
+- unsloth (para fine-tuning)
+- APScheduler (para automatización)
+
+**Datos:**
+- 100-200 conversaciones reales (para fine-tuning)
+- 10-20 para test
+
+### 9.3 Arquitectura del sistema
+
+```
+┌─────────────────────────────────────────────┐
+│         INTERFAZ USUARIO                    │
+│    Discord Bot / Telegram / Web              │
+└────────────────┬────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────┐
+│      API (FastAPI)                          │
+│  Recibe preguntas, almacena conversaciones  │
+└────────────────┬────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────┐
+│     RAG + Inference (LangChain + Ollama)    │
+│  Responde preguntas con contexto            │
+└────────────────┬────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────┐
+│    DATABASE                                 │
+│  Conversaciones, modelos, métricas          │
+└────────────────┬────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────┐
+│  CICLO AUTÓNOMO (Capítulo 8)               │
+│  Ejecuta cada lunes automáticamente         │
+└─────────────────────────────────────────────┘
+```
+
+### 9.4 Código completo del proyecto
+
+#### Parte 1: API (main.py)
+
+```python
+# main.py
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from datetime import datetime
+from langchain.chat_models import ChatOllama
+from langchain.vectorstores import Chroma
+import sqlite3
+import json
+
+app = FastAPI()
+db = sqlite3.connect("conversaciones.db", check_same_thread=False)
+
+# Modelo de entrada
+class Pregunta(BaseModel):
+    texto: str
+    usuario_id: str
+
+# Modelo LLM
+llm = ChatOllama(model="hermes2-pro", base_url="http://localhost:11434")
+
+# Vector store (RAG)
+vectorstore = Chroma(persist_directory="./chroma_db")
+
+# ===== ENDPOINTS =====
+
+@app.post("/preguntar")
+def preguntar(pregunta: Pregunta):
+    """Responde pregunta con RAG + LLM"""
+    
+    # 1. RAG: Buscar contexto
+    docs_relevantes = vectorstore.similarity_search(pregunta.texto, k=3)
+    contexto = "\n".join([d.page_content for d in docs_relevantes])
+    
+    # 2. Generar respuesta
+    prompt = f"""Contexto:
+{contexto}
+
+Pregunta: {pregunta.texto}
+
+Responde basándote en el contexto."""
+    
+    respuesta = llm.predict(prompt)
+    
+    # 3. Guardar conversación
+    cursor = db.cursor()
+    cursor.execute("""
+        INSERT INTO conversaciones (usuario_id, pregunta, respuesta, timestamp)
+        VALUES (?, ?, ?, ?)
+    """, (pregunta.usuario_id, pregunta.texto, respuesta, datetime.now().isoformat()))
+    db.commit()
+    
+    return {
+        "respuesta": respuesta,
+        "fuentes": [d.metadata.get("source", "?") for d in docs_relevantes]
+    }
+
+@app.get("/metricas")
+def metricas():
+    """Retorna métricas de entrenamiento"""
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM ciclos ORDER BY id DESC LIMIT 1")
+    ultimo_ciclo = cursor.fetchone()
+    
+    return {
+        "score_anterior": ultimo_ciclo[1],
+        "score_nuevo": ultimo_ciclo[2],
+        "mejora": ultimo_ciclo[3],
+    }
+
+# ===== INIT =====
+
+def init_db():
+    """Crea tablas si no existen"""
+    cursor = db.cursor()
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conversaciones (
+            id INTEGER PRIMARY KEY,
+            usuario_id TEXT,
+            pregunta TEXT,
+            respuesta TEXT,
+            timestamp TEXT
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ciclos (
+            id INTEGER PRIMARY KEY,
+            score_anterior FLOAT,
+            score_nuevo FLOAT,
+            mejora FLOAT,
+            timestamp TEXT
+        )
+    """)
+    
+    db.commit()
+
+if __name__ == "__main__":
+    init_db()
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+Ejecutar:
+```bash
+python main.py
+# API en http://localhost:8000
+```
+
+#### Parte 2: Entrenamiento automático (auto_train.py)
+
+```python
+# auto_train.py
+# Este es el ciclo autónomo del Capítulo 8
+# Adaptado para nuestro proyecto
+
+import ray
+import sqlite3
+import json
+from datetime import datetime
+
+ray.init(address="auto")
+
+@ray.remote
+def ciclo_entrenamiento_proyecto():
+    """Ciclo completo para el proyecto"""
+    
+    # 1. Extraer conversaciones reales
+    db = sqlite3.connect("conversaciones.db")
+    cursor = db.cursor()
+    cursor.execute("""
+        SELECT pregunta, respuesta FROM conversaciones 
+        WHERE timestamp > datetime('now', '-7 days')
+    """)
+    conversaciones = cursor.fetchall()
+    
+    if len(conversaciones) < 10:
+        print("⏭️ Menos de 10 conversaciones, saltando")
+        return
+    
+    print(f"📊 Recolectadas {len(conversaciones)} conversaciones")
+    
+    # 2. Convertir a formato de entrenamiento
+    dataset = [
+        {
+            "instruction": c[0],
+            "input": "",
+            "output": c[1]
+        }
+        for c in conversaciones
+    ]
+    
+    # 3. Fine-tuning (código del Capítulo 4)
+    modelo_ft = ejecutar_fine_tuning(dataset)
+    print("✅ Fine-tuning completado")
+    
+    # 4. Destilación (código del Capítulo 5)
+    modelo_destilado = ejecutar_destilacion(modelo_ft)
+    print("✅ Destilación completada")
+    
+    # 5. Evaluación
+    test_set = cargar_test_set()
+    score_viejo = evaluar_en_produccion(test_set)
+    score_nuevo = evaluar_modelo_nuevo(modelo_destilado, test_set)
+    mejora = (score_nuevo - score_viejo) / score_viejo * 100
+    
+    print(f"📊 Mejora: {mejora:+.1f}%")
+    
+    # 6. Si mejoró, publicar
+    if mejora > 0:
+        modelo_destilado.save_pretrained("./modelos/produccion/latest")
+        print("🚀 Publicado en producción")
+    
+    # 7. Registrar en DB
+    cursor.execute("""
+        INSERT INTO ciclos (score_anterior, score_nuevo, mejora, timestamp)
+        VALUES (?, ?, ?, ?)
+    """, (score_viejo, score_nuevo, mejora, datetime.now().isoformat()))
+    db.commit()
+    
+    return True
+
+# Programar
+if __name__ == "__main__":
+    from apscheduler.schedulers.background import BackgroundScheduler
+    import atexit
+    
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        func=lambda: ray.get(ciclo_entrenamiento_proyecto.remote()),
+        trigger="cron",
+        day_of_week="mon",
+        hour=8,
+    )
+    scheduler.start()
+    print("✅ Ciclo autónomo programado (lunes 8am)")
+    
+    atexit.register(lambda: scheduler.shutdown())
+    
+    # Mantener corriendo
+    import time
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("🛑 Detenido")
+```
+
+#### Parte 3: Discord Bot (bot.py)
+
+```python
+# bot.py
+import discord
+from discord.ext import commands
+import requests
+
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.default())
+
+API_URL = "http://localhost:8000"
+
+@bot.event
+async def on_ready():
+    print(f"✅ Bot conectado como {bot.user}")
+
+@bot.command()
+async def ask(ctx, *, pregunta):
+    """Haz una pregunta al chatbot"""
+    
+    # Llamar API
+    response = requests.post(f"{API_URL}/preguntar", json={
+        "texto": pregunta,
+        "usuario_id": str(ctx.author.id)
+    })
+    
+    datos = response.json()
+    respuesta = datos["respuesta"]
+    
+    # Enviar a Discord
+    embed = discord.Embed(
+        title="🤖 Respuesta",
+        description=respuesta[:2000],  # Límite Discord
+        color=discord.Color.blue()
+    )
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def metricas(ctx):
+    """Ver métricas del modelo"""
+    
+    response = requests.get(f"{API_URL}/metricas")
+    datos = response.json()
+    
+    embed = discord.Embed(
+        title="📊 Métricas del Modelo",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Score Anterior", value=f"{datos['score_anterior']:.2f}")
+    embed.add_field(name="Score Nuevo", value=f"{datos['score_nuevo']:.2f}")
+    embed.add_field(name="Mejora", value=f"{datos['mejora']:+.1f}%")
+    
+    await ctx.send(embed=embed)
+
+# Token en variable de entorno
+import os
+TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+bot.run(TOKEN)
+```
+
+Ejecutar:
+```bash
+export DISCORD_BOT_TOKEN="tu_token"
+python bot.py
+```
+
+### 9.5 Diagrama de ejecución completa
+
+```
+Usuario en Discord:
+  !ask ¿Cuál es el proceso de vacaciones?
+    ↓
+Bot envía a API
+    ↓
+API:
+  1. Busca contexto en RAG
+  2. Genera respuesta con LLM
+  3. Guarda en DB
+    ↓
+Bot responde en Discord
+  "Según nuestros documentos, son 15 días..."
+    ↓
+[Cada lunes a las 8am]
+    ↓
+Ciclo autónomo:
+  1. Recolecta conversaciones de la semana
+  2. Fine-túnea modelo
+  3. Destila
+  4. Evalúa
+  5. Si mejoró: publica
+  6. Reporta en Slack
+    ↓
+[Próxima semana]
+    ↓
+Modelo mejorado, usuarios notan respuestas mejores
+```
+
+### 9.6 Checklist: Lanzar el sistema
+
+- [ ] Base de datos creada (`conversaciones.db`)
+- [ ] Modelos en Ollama descargados
+- [ ] RAG indexado (`chroma_db`)
+- [ ] API iniciada (`python main.py`)
+- [ ] Ciclo autónomo programado (`python auto_train.py`)
+- [ ] Bot Discord conectado (`python bot.py`)
+- [ ] Cluster Ray funcionando (2+ máquinas)
+- [ ] Primeras conversaciones guardadas
+- [ ] Primer ciclo lunes ejecutado exitosamente
+- [ ] Métricas mejorando semana a semana
+
+### 9.7 Costos y ROI
+
+```
+Inversión inicial (hardware):
+  - GPU actual: $0 (ya tienes)
+  - Máquina cluster: $200
+  - Networking: $50
+  - Total: $250
+
+Costo mensual:
+  - Electricidad: $50
+  - Mantenimiento: $0
+  Total: $50/mes
+
+Ahorro vs cloud:
+  - API Claude: $1000/mes
+  - API OpenAI: $500-2000/mes
+  - Runpod (backup): $200/mes
+  
+  Ahorro: $500-2000/mes
+
+ROI: 0.2-0.5 meses (recuperas inversión muy rápido)
+```
+
+### 9.8 Próximos pasos avanzados
+
+Una vez el sistema corra:
+
+1. **Agregar más agentes:** Multi-agente del Capítulo 6
+2. **Fusionar modelos:** Capítulo 7
+3. **Escalar cluster:** Agregar más máquinas
+4. **Monetizar:** Vender acceso a la API
+5. **Especializarse:** Fine-túnea para dominio específico
+
+---
+
+# Apéndices
+
+## Apéndice A: Comandos Essenciales de Ollama
+
+```bash
+# Ver modelos descargados
+ollama list
+
+# Descargar modelo
+ollama pull nombre_modelo
+
+# Eliminar modelo
+ollama rm nombre_modelo
+
+# Ejecutar modelo interactivo
+ollama run modelo
+
+# Ver logs
+ollama logs
+
+# Parar servicio
+pkill -f ollama
+```
+
+## Apéndice B: Errores Frecuentes y Soluciones
+
+```
+Error: CUDA out of memory
+Solución: Reduce batch_size o max_seq_length
+
+Error: Model not found
+Solución: ollama pull model_name
+
+Error: Ray connection refused
+Solución: Verifica que Ray está corriendo. ray status
+
+Error: Dataset format invalid
+Solución: Valida JSON con: python -m json.tool dataset.json
+```
+
+## Apéndice C: Fuentes de Modelos
+
+- **Hugging Face:** https://huggingface.co/models
+- **Ollama Library:** https://ollama.ai/library
+- **Replicate:** https://replicate.com/models
+
+## Apéndice D: Glosario
+
+- **Embedding:** Vector numérico que representa significado
+- **Fine-tuning:** Reentrenamiento con datos nuevos
+- **Destilación:** Transferencia de conocimiento modelo grande a pequeño
+- **LoRA:** Adaptadores pequeños para fine-tuning eficiente
+- **VRAM:** Memoria de la GPU
+- **RAG:** Recuperación aumentada por generación
+- **Cluster:** Múltiples máquinas conectadas
+
+---
+
+**FIN DEL LIBRO**
+
+Ahora tienes todo. Desde configuración básica hasta un sistema autónomo completo que mejora cada semana.
+
+¿Preguntas? ¿Necesitas expandir alguna sección?
