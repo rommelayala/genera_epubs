@@ -578,7 +578,212 @@ Phi                 Código y razonamiento
 Qwen                Código y análisis complejos
 Gemma               Propósito general (destilable)
 Mistral             Velocidad, producción
+Hermes              Instrucciones estructuradas, razonamiento
 ```
+
+### 2.5.5 ¿Necesitas más poder? Estrategias de expansión de hardware
+
+En algún momento te encontrarás con un problema real:
+
+> "Mi GPU de 8 GB se queda sin memoria cuando intento hacer X"
+
+O quizás:
+
+> "Tardaría 3 semanas en entrenar esto. Necesito hacerlo en 3 días"
+
+Aquí tienes dos caminos: expandir localmente o usar computación externa. Voy a darte ambas estrategias.
+
+#### Opción A: Expansión interna (tu máquina, componentes nuevos)
+
+**Estrategia 1: Actualizar GPU**
+
+Es la más directa pero la más cara.
+
+```
+Tu GPU actual     Upgrade recomendado     Costo aprox.    Mejora
+─────────────────────────────────────────────────────────────────
+RTX 4060 (8GB) → RTX 4070 (12GB)        $600-800        +50% VRAM
+RTX 4070 (12GB) → RTX 4080 (16GB)       $1200-1500      +33% VRAM
+RTX 4090 (24GB) → A100 (80GB)           $10,000+        10x VRAM
+```
+
+⚠️ **Realidad:** Una GPU más grande NO hace todo 10x más rápido. Hace ciertas cosas (como fine-tuning de modelos grandes) viables, pero no es milagro.
+
+✅ **Vale la pena si:**
+- Necesitas entrenar modelos de 20B+ parámetros
+- Quieres parallelismo (múltiples procesos simultáneos)
+- Planeas vender servicios de IA
+
+❌ **No vale la pena si:**
+- Solo necesitas hacer RAG e inference
+- Tu GPU actual maneja tus tareas actuales
+- Dinero es limitado (hay alternativas mejores)
+
+**Estrategia 2: Agregar más RAM del sistema**
+
+Más barata que GPU. A veces crucial.
+
+```bash
+# Ver RAM actual
+free -h  # Linux
+vm_stat  # Mac
+```
+
+Si tienes menos de 32 GB, agregar a 64 GB cuesta $100-200 y es muy rentable. Tu sistema puede hacer caché inteligente, operaciones en paralelo, etc.
+
+**Estrategia 3: Múltiples GPUs locales**
+
+Si tienes una GPU, agregar una segunda (o tercera) en la misma máquina multiplica capacidad.
+
+```bash
+# Ver todas tus GPUs
+nvidia-smi
+```
+
+⚠️ **Complicación:** Paralelizar requiere código especial (Distributed Data Parallel, pipeline parallelism). No es tan simple como "compra 2 GPUs y listo".
+
+**Costo-beneficio:** Solo viable si tu máquina soporte múltiples GPUs (motherboard, PSU, espacio físico).
+
+#### Opción B: Expansión externa (computación en cloud)
+
+**Estrategia 1: Google Colab (Gratuito, con limitaciones)**
+
+Pros:
+- Gratis (o $10/mes para Colab Pro)
+- GPU K80/T4/A100 disponible
+- Jupyter notebook integrado
+- Idealpara experimentos rápidos
+
+Contras:
+- Sesión muere después de 12 horas (pro) o 30 minutos sin usar
+- No puedes dejar modelos entrenando overnight
+- Ancho de banda limitado para descargar modelos grandes
+- No es reproducible (la GPU que obtengas varía)
+
+✅ **Ideal para:** Prototiping, aprendizaje, un fine-tuning único que no necesite ser exacto.
+
+**Estrategia 2: Runpod (GPU rentada, barata)**
+
+Pros:
+- $0.30-0.50/hora por A40 (24GB VRAM)
+- $0.70-1.00/hora por A100 (80GB)
+- Alquilas por minutos, no por suscripción
+- Puedes dejar entrenando días
+- Acceso a muchos modelos preinstalados
+
+Contras:
+- Costos se acumulan rápido (30 horas × $0.40 = $12)
+- Necesitas transferir modelos (descarga lenta)
+- Interfaz menos pulida que AWS
+
+✅ **Ideal para:** Fine-tuning serio que no puedes hacer en local, destilación de modelos grandes.
+
+**Ejemplo de costo:**
+```
+Tu modelo: 7B, batch_size=4, 100 horas entrenamiento
+- Local en RTX 4060: 100 horas / 0.5 = 200 horas reales = ~$0 (lo pagas con electricidad)
+- Runpod A40: 100 horas × $0.40 = $40
+- AWS p3.2xlarge: 100 horas × $3.06 = $306
+
+Veredicto: Runpod gana si necesitas velocidad. Local gana si tienes tiempo.
+```
+
+**Estrategia 3: Together AI (acceso a modelos remotos)**
+
+No es GPU rentada. Es "usa nuestros modelos ya entrenados".
+
+Pros:
+- $0.001-0.01 por millón de tokens (ultra barato)
+- No necesitas GPU, solo internet
+- Fine-tuning en cloud (ellos entrenan, tú pagas)
+
+Contras:
+- Solo funciona para modelos que ellos hospeden
+- No es control total (usas su infraestructura)
+- Latencia varía (0.5-2s por respuesta típicamente)
+
+✅ **Ideal para:** Producción sin GPU local. Escalabilidad automática.
+
+**Estrategia 4: Kaggle Notebooks (Gratuito, limitado)**
+
+Pros:
+- GPU P100 / T4 gratuita
+- 30 horas/semana
+- Buena integración con Hugging Face
+
+Contras:
+- Menos VRAM que Colab
+- Interfaz poco intuitiva
+- Comunidad más pequeña que Colab
+
+✅ **Ideal para:** Experimentos cuando Colab está saturado.
+
+#### Opción C: Estrategia híbrida (lo mejor de ambos mundos)
+
+Esto es lo que hacen equipos profesionales:
+
+**Fase 1: Desarrollo local**
+- Usa tu GPU de 8 GB
+- Itera rápido con datasets pequeños
+- Prueba código, hiperparámetros
+
+**Fase 2: Entrenamiento en cloud**
+- Cuando el código funciona, escala en Runpod
+- Entrena con full dataset
+- Guarda modelo resultante
+
+**Fase 3: Deployment local**
+- Descarga modelo entrenado
+- Sirve en tu máquina o en servidor local
+- Cero costos de infraestructura recurrente
+
+**Ejemplo de flujo:**
+```
+Día 1 (Local, gratis):
+  - Descargas 10% de datos
+  - Fine-túneas 1 hora
+  - Ves que funciona
+
+Día 2-3 (Runpod, $40):
+  - Subes script validado
+  - Entrenas con 100% datos
+  - Esperas ~50 horas
+
+Día 4+ (Local, gratis):
+  - Descargas modelo
+  - Lo usas en Ollama
+  - Cero gastos mensuales
+```
+
+#### Tabla decisional: ¿Qué opción elegir?
+
+```
+¿Necesitas hacerlo hoy?
+  → Sí, en 3 horas → Google Colab (gratuito)
+  → Sí, en 24 horas → Runpod A40 ($10-15)
+  → Sí, es crítico → AWS p3 ($100-300)
+  → No urgente → Espera y usa local
+
+¿Es un experimento único?
+  → Sí → Runpod (paga por minuto, no suscripción)
+  → No, repetido → Considera actualizar tu GPU
+
+¿Presupuesto?
+  → $0 → Colab/Kaggle (gratuito, con límites)
+  → $100-500/mes → Runpod bajo demanda
+  → $500+ → GPU propia (RTX 4090) + dedicado
+
+¿Cuántos GB de VRAM necesitas?
+  → 8-12 GB → Local (probablemente suficiente)
+  → 12-24 GB → Runpod T4/A40
+  → 24-80 GB → Runpod A100 / AWS p3
+  → 80+ GB → AWS DGX / cloud profesional
+```
+
+**Mi recomendación:**
+1. **Comienza con tu GPU actual.** No es limitante para 80% de lo que querrás hacer.
+2. **Si necesitas speedup:** Runpod + Colab (híbrido). Costo bajo, no compromiso.
+3. **Si escalas a producción:** Actualiza a RTX 4090 o súbete a un VPS con GPU.
 
 ### 2.6 Instalación de dependencias Python para fine-tuning
 
