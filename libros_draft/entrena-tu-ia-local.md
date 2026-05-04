@@ -141,6 +141,18 @@ Tiempo: 4 horas en GPU de 8 GB
 
 ✅ **Esto sí es viable.** Y es lo central de este libro.
 
+### 1.2 Recomendaciones de Hardware: El Setup Realista
+
+Antes de avanzar, resolvamos la eterna duda del hardware con enfoque pragmático (sin marketing):
+
+**El Rey Calidad/Precio (PC): RTX 3090 usada**
+Comprar una RTX 4070 nueva (12GB) por $600 es un error si tu foco es IA. La IA demanda **memoria (VRAM)**, no solo velocidad. Por ~$700 puedes conseguir una RTX 3090 usada en eBay que tiene unos masivos **24GB de VRAM**. Con 24GB puedes cargar modelos grandes, hacer RAG masivo y fine-tuning sin problemas.
+
+**Mac vs PC para IA Local**
+Aquí ocurre la "magia" de Apple Silicon. Un PC tradicional separa la RAM del sistema de la VRAM de la tarjeta de video. Si tienes 128GB de RAM pero tu GPU tiene 8GB, para IA solo tienes 8GB. 
+Pero las Macs (M1/M2/M3/M4) usan **Unified Memory**. Si tu MacBook Pro tiene 36GB de RAM, la GPU puede usar casi los 36GB enteros para cargar modelos gigantes. 
+- *Veredicto:* Si vas a armar algo de cero y tienes bajo presupuesto: PC con GPU Nvidia usada. Si ya tienes una Mac Silicon con 16GB+ de RAM (o quieres portabilidad extrema): usa tu Mac, es un monstruo subestimado para IA local.
+
 ### 1.2 ¿Por qué un modelo local no aprende solo con preguntas?
 
 Aquí viene el concepto que más sorprende a la gente.
@@ -784,6 +796,17 @@ Día 4+ (Local, gratis):
 1. **Comienza con tu GPU actual.** No es limitante para 80% de lo que querrás hacer.
 2. **Si necesitas speedup:** Runpod + Colab (híbrido). Costo bajo, no compromiso.
 3. **Si escalas a producción:** Actualiza a RTX 4090 o súbete a un VPS con GPU.
+
+### 2.7 Del Laboratorio a Producción: Ollama vs vLLM
+
+Ollama es fantástico para desarrollo. Te permite charlar, testear y prototipar. Pero si quieres conectar tu modelo local a una aplicación web donde 10 usuarios van a hacer preguntas al mismo tiempo, Ollama colapsará y las pondrá en cola una por una.
+
+Aquí entra **vLLM** (o **SGLang**).
+vLLM es un motor de inferencia diseñado para producción. Usa técnicas como *PagedAttention* para procesar múltiples peticiones en paralelo (batching) exprimiendo hasta la última gota de tu GPU barata.
+
+**Regla de oro:** 
+- Para ti, en tu terminal = Ollama.
+- Para tu backend, recibiendo tráfico = vLLM.
 
 ### 2.7 Construir un cluster casero: tu plataforma escalable para AIs
 
@@ -2360,7 +2383,50 @@ for test in test_cases:
 
 ✅ **Si ve más ✅ después, el fine-tuning funcionó.**
 
-### 4.9 Próximo paso
+### 4.9 La Pesadilla de los Chat Templates
+
+El 80% de los fine-tunings fallan silenciosamente no por hardware, sino porque la persona mezcló formatos.
+
+Si tu modelo base es LLaMA 3, espera ver los datos así:
+`<|start_header_id|>user<|end_header_id|>
+
+Hola<|eot_id|>`
+
+Si tú entrenas el modelo enviándole datos en formato ChatML:
+`<|im_start|>user
+Hola<|im_end|>`
+
+El modelo se confundirá y aprenderá a generar basura espacial. 
+**Regla de oro:** Averigua el `chat_template` exacto del modelo base y formatea tu dataset JSONL para que coincida perfectamente. Herramientas como Unsloth te ayudan a mapear esto automáticamente con `get_chat_template`, pero NUNCA asumas que un JSON sirve para cualquier modelo.
+
+### 4.10 Fine-tuning nativo en Mac (Apple Silicon) usando MLX
+
+Si eres usuario de Mac (M1/M2/M3/M4), te habrás dado cuenta de un problema: **Unsloth requiere Nvidia/CUDA.** Tus scripts explotarán.
+
+Pero tienes una ventaja injusta: la **Memoria Unificada**. 
+Apple creó el framework **MLX** (`mlx-lm`) específicamente para correr y fine-tunear modelos directamente sobre el chip M. Es ridículamente rápido y eficiente.
+
+**Cómo fine-tunear en Mac (sin Python scripting):**
+```bash
+# 1. Instalar MLX
+pip install mlx-lm
+
+# 2. Ejecutar el entrenamiento nativo (ejemplo con tu data.jsonl)
+mlx_lm.lora \
+  --model "mlx-community/Meta-Llama-3-8B-Instruct-4bit" \
+  --train \
+  --data "ruta/a/tus/datos" \
+  --iters 1000 \
+  --lora-layers 16
+
+# 3. Fusionar adaptadores exportando a GGUF para usar en Ollama
+mlx_lm.fuse \
+  --model "mlx-community/Meta-Llama-3-8B-Instruct-4bit" \
+  --export-gguf
+```
+MLX usa tu GPU (Metal) automáticamente. No necesitas Unsloth. Tu MacBook Pro de 32GB es una estación de entrenamiento completa.
+
+### 4.11 Próximo paso
 
 Fine-tuning es Fase 2 del ciclo.
 

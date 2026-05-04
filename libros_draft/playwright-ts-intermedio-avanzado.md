@@ -25,7 +25,9 @@
 11. [Herramientas del arsenal](#herramientas)
 12. [Patrones QA de nivel senior](#patrones)
 13. [Integración con Cucumber y Gherkin — BDD con Sentido](#cucumber)
-14. [Glosario de referencia rápida](#glosario)
+14. [CI/CD a Gran Escala — Sharding y Merge Reports](#sharding)
+15. [El Futuro del QA — Self-Healing Locators con IA](#healing)
+16. [Glosario de referencia rápida](#glosario)
 
 ---
 
@@ -1250,6 +1252,37 @@ export const test = base.extend<{}, WorkerFixtures>({
 <a name="tricks"></a>
 # 10. Tricks Superchulos Que No Están en la Docs
 
+## `test.step()` — Reportes Legibles (Estilo BDD) sin Cucumber
+
+Si quieres que tus reportes HTML nativos de Playwright se lean como si estuvieran escritos en Gherkin por negocio, pero no quieres la complejidad de instalar y mantener Cucumber, **`test.step()`** es la respuesta.
+
+Agrupa acciones lógicas en pasos. En el reporte final, estos pasos aparecerán colapsables y detallados.
+
+```typescript
+test('Proceso de checkout completo', async ({ page, cartPage, checkoutPage }) => {
+  await test.step('1. Dado que el usuario tiene items en el carrito', async () => {
+    await cartPage.navigate();
+    await cartPage.addMockItems(2);
+    await expect(cartPage.totalItems).toHaveText('2');
+  });
+
+  await test.step('2. Cuando procede al pago con tarjeta válida', async () => {
+    await cartPage.clickCheckout();
+    await checkoutPage.fillCreditCard('4242424242424242');
+    await checkoutPage.submitOrder();
+  });
+
+  await test.step('3. Entonces ve la pantalla de confirmación', async () => {
+    await expect(page.locator('.order-success')).toBeVisible();
+  });
+});
+```
+Esto transforma un test monolítico en una estructura auto-documentada.
+
+---
+
+
+
 ## Truco 1: Soft assertions — no parar al primer error
 
 ```typescript
@@ -2277,6 +2310,13 @@ After(async function (this: ICustomWorld, { result }) {
     this.attach(html, 'text/html');
   }
 
+  // Ejemplo: Atachar respuestas API al reporte de Cucumber (Estilo Karate)
+  // Si en tu test guardaste un payload JSON en this.testData['lastResponse'], 
+  // puedes inyectarlo al HTML report así:
+  if (this.testData['lastResponse']) {
+    this.attach(JSON.stringify(this.testData['lastResponse'], null, 2), 'application/json');
+  }
+
   await this.apiRequest.dispose();
   await this.page.close();
   await this.context.close();
@@ -2705,7 +2745,102 @@ await this.page.waitForSelector('[data-testid="dashboard-loaded"]');
 ---
 
 <a name="glosario"></a>
-# 14. Glosario de Referencia Rápida
+# 14. CI/CD a Gran Escala — Sharding y Merge Reports
+
+Correr 100 tests localmente toma 2 minutos. Correr 5,000 tests E2E reales en un pipeline puede tomar horas. La solución profesional no es optimizar selectores, es **escalar horizontalmente**.
+
+Playwright tiene soporte nativo para fragmentar (shard) una suite de tests.
+
+## `--shard` en GitHub Actions
+
+En lugar de correr un job largo, levantas 10 runners paralelos. Cada runner corre un 10% de los tests.
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shardTotal: [10]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+    - run: npm ci
+    - run: npx playwright install --with-deps
+    
+    # Corre solo 1 décima parte de la suite
+    - run: npx playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+    
+    # Sube el blob del reporte de este fragmento
+    - uses: actions/upload-artifact@v4
+      with:
+        name: blob-report-${{ matrix.shardIndex }}
+        path: blob-report
+        retention-days: 1
+```
+
+## `merge-reports`
+
+Luego de que los 10 jobs terminen, usas un job final que descarga todos los blobs (fragmentos de reporte) y los unifica en un solo reporte HTML gigante, como si los 5,000 tests hubieran corrido en una sola máquina superpotente.
+
+```bash
+npx playwright merge-reports --reporter html ./all-blob-reports
+```
+Esto reduce el tiempo de pipeline de horas a los minutos que tarde el test más largo.
+
+---
+
+# 15. El Futuro del QA — Self-Healing Locators con IA
+
+Como hemos visto en los libros de *Gemini Uso Maestro* y *Claude*, la IA no viene a reemplazar al tester, viene a darle superpoderes.
+El mayor dolor del QA tradicional es el mantenimiento: un desarrollador cambia `<button class="btn-primary">` a `<button class="btn-submit">` y todo el pipeline rojo.
+
+En 2026, construimos **Self-Healing Fixtures**.
+
+En lugar de fallar inmediatamente ante un `TimeoutError`, el fixture captura el error, extrae el DOM de la página, se lo envía a una IA (Gemini, Claude o un modelo local en Ollama) y le pregunta: *"El botón que buscaba con el selector '.btn-primary' ya no existe. Analiza este DOM y dime el nuevo selector CSS."*
+
+### Concepto de Fixture de Auto-Recuperación
+
+```typescript
+// Pseudocódigo arquitectónico del futuro
+export const test = base.extend({
+  smartPage: async ({ page }, use) => {
+    const smartClick = async (selector: string) => {
+      try {
+        await page.click(selector, { timeout: 3000 });
+      } catch (error) {
+        if (error.name === 'TimeoutError') {
+          console.log(`[AI] Selector roto: ${selector}. Pidiendo ayuda a Gemini...`);
+          const domSnapshot = await page.evaluate(() => document.body.innerHTML);
+          
+          // Llamada a la API de tu LLM (gemini-2.5-flash)
+          const newSelector = await askAIForNewSelector(domSnapshot, selector);
+          
+          console.log(`[AI] Nuevo selector encontrado: ${newSelector}. Reintentando...`);
+          await page.click(newSelector);
+          
+          // BONUS: Reportar automáticamente el cambio a Slack/Jira para arreglar el POM
+          await reportBrokenLocatorToDevs(selector, newSelector);
+        } else {
+          throw error;
+        }
+      }
+    };
+    
+    await use({ ...page, smartClick });
+  }
+});
+```
+
+Este es el santo grial de la automatización. Playwright + TypeScript proporcionan la infraestructura robusta; la IA proporciona la adaptabilidad.
+
+---
+
+<a name="glosario"></a>
+# 16. Glosario de Referencia Rápida
+
 
 | Término | Qué es |
 |---------|--------|

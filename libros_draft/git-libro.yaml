@@ -4,6 +4,7 @@ description: "Guía completa para dominar Git con framework 5W1H y perfil QA. De
 language: "es-ES"
 date: "2026"
 cover:
+  image: "git-libro.jpg"
   title: "Git Uso Maestro"
   subtitle: "De Usuario Principiante a Casi experto"
 

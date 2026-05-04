@@ -4,6 +4,7 @@ description: "El libro para developers que empiezan desde cero en inteligencia a
 language: "es-ES"
 date: "2026"
 cover:
+  image: "fundamentos-ia-libro.jpg"
   title: "Fundamentos de IA"
   subtitle: "Para Profesionales del Código"
 

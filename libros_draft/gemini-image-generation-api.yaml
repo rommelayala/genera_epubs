@@ -4,6 +4,7 @@ description: "Curso-tutorial exhaustivo de generación de imágenes con Gemini. 
 language: "es-ES"
 date: "2026"
 cover:
+  image: "gemini-image-generation-api.jpg"
   title: "Gemini Image Generation API"
   subtitle: "Guía Completa de Generación de Imágenes con IA"
 

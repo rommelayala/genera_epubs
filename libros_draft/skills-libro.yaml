@@ -4,6 +4,7 @@ description: "Libro-curso-tutorial sobre skills de IA usando el framework 5W1H. 
 language: "es-ES"
 date: "2026"
 cover:
+  image: "skills-libro.jpg"
   title: "Skills de IA"
   subtitle: "De la Teoría al Poder Real"
 

@@ -5,6 +5,7 @@ language: "es-ES"
 date: "2026"
 
 cover:
+  image: "entrena-tu-ia-local.jpg"
   title: "Entrena tu IA en Local"
   subtitle: "Ciclo Autónomo de Mejora Continua"
   bg_color: "#0d1117"

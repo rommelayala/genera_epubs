@@ -4,6 +4,7 @@ description: "Curso práctico sobre Gemini Nano para ejecutar modelos de IA dire
 language: "es-ES"
 date: "2026"
 cover:
+  image: "gemini-nano-on-device-ai.jpg"
   title: "Gemini Nano"
   subtitle: "IA on-device desde cero hasta producción"
 

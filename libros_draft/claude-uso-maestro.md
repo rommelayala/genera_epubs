@@ -3405,3 +3405,100 @@ Cambiar en headless: `claude -p "..." --model claude-haiku-4-5`
 
 *Fin del curso — Claude Uso Maestro*
 *Versión 1.0 · Perfil QA · Abril 2026*
+
+---
+
+# PARTE V — CLAUDE Y EL ECOSISTEMA LOCAL (OLLAMA + MCP)
+
+---
+
+## 1. El Mito del "Claude Local" y la Realidad Híbrida
+
+Hay un mito recurrente en foros y equipos de desarrollo: *"¿Cómo descargo Claude para correrlo en mi Mac con Ollama?"*.
+
+**La realidad brutal:** No puedes. Claude (toda la familia Haiku, Sonnet y Opus) es tecnología cerrada de Anthropic. Sus pesos (el "cerebro" matemático) no son públicos como los de Llama3, Qwen o Mistral. Claude vive en servidores remotos y solo puedes acceder a él vía API o Web.
+
+Sin embargo, aquí es donde el Operador Maestro se separa del usuario promedio. En lugar de intentar meter a Claude en una caja local, **construye una Arquitectura Híbrida**.
+
+Imagina a Claude (API) como tu Arquitecto Senior (inteligente, preciso, pero cobra por hora) y a Ollama como tu ejército de desarrolladores Junior (corren en tu Mac, no cuestan nada, pero necesitan instrucciones claras). El secreto del flujo moderno es conectar al Arquitecto Senior con los Juniors. Y la pieza que une ambos mundos se llama **MCP**.
+
+---
+
+## 2. Model Context Protocol (MCP) al Rescate
+
+El **Model Context Protocol (MCP)** es un estándar abierto impulsado por Anthropic que resuelve un problema fundamental: ¿cómo le doy a un LLM en la nube acceso a mis herramientas locales de forma segura?
+
+Antes, tenías que construir complejas APIs REST o usar frameworks como LangChain. Con MCP, todo funciona cliente-servidor:
+- **El Cliente:** Claude Desktop (o asistentes como Cline / RooCode).
+- **El Servidor MCP:** Un pequeño script local que expone recursos (archivos, bases de datos) o herramientas (comandos bash, llamadas a otros LLMs).
+
+### ¿Por qué MCP cambia el juego para QAs y Devs?
+
+Porque permite que la aplicación de Claude que tienes abierta en tu escritorio lea tus logs locales, ejecute queries en tu base de datos SQLite de pruebas, e incluso... **pida ayuda a Ollama.**
+
+---
+
+## 3. Conectando Claude Desktop a Ollama
+
+Vamos a configurar tu Claude Desktop para que pueda enviar "subtareas" a tus modelos locales en Ollama. 
+
+**Caso de Uso Práctico:** Tienes 50,000 líneas de un log de sistema y necesitas extraer solo los errores de concurrencia. Si se lo pasas a Claude, vas a quemar tokens masivamente. Con esta configuración, le pides a Claude que delegue la tarea de limpieza a un modelo local (`qwen2.5`) antes de hacer el análisis arquitectónico.
+
+### Paso a paso: La configuración JSON
+
+En macOS, Claude Desktop lee su configuración de herramientas desde este archivo:
+`~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Podemos levantar un servidor MCP que actúe como "puente" hacia Ollama. Usaremos un servidor MCP genérico de ejecución de comandos bash para llamar al CLI de Ollama (el enfoque "AIQ" más directo).
+
+Edita el archivo `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "bash_local": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-bash"
+      ]
+    }
+  }
+}
+```
+*(Nota: Existen servidores MCP específicos para conectar Ollama por API REST, evolucionando rápidamente en GitHub, pero el enfoque Bash te da poder absoluto sobre tu terminal).*
+
+Una vez configurado y reiniciado Claude Desktop, verás el icono del "enchufe" iluminarse en la app. 
+
+Ahora puedes darle este prompt a Claude:
+> *"Revisa mi arquitectura de red en este archivo. Pero antes, usa la herramienta bash para ejecutar `ollama run qwen2.5 'Resume los errores críticos en este log crudo: /tmp/app.log'` y usa ese resumen corto para tu análisis principal."*
+
+Claude no lee los 50,000 logs. Claude orquesta la petición. Ollama procesa en local. Claude resume la conclusión.
+
+---
+
+## 4. El Patrón Orquestador-Trabajador (The "Tech Lead" Pattern)
+
+El ecosistema no termina en Claude Desktop. Herramientas de terminal como **Cline** (antes Claude Dev) o **RooCode** implementan este patrón a la perfección integrando ambos mundos en tu IDE (VSCode/Cursor).
+
+### Cómo lo estructura el Operador Maestro:
+
+1. **La Planificación (Claude Sonnet 3.5 vía API):**
+   Abre una sesión de tu asistente de código con Claude y dile:
+   > *"Actúa como Arquitecto. Diseña el plan de implementación para migrar esta DB a PostgreSQL. Genera el esquema de tablas y los tests unitarios. Escribe el plan en `plan_migracion.md`."*
+   
+   *Costo:* ~$0.10 por un razonamiento de nivel élite que a un humano le tomaría horas.
+
+2. **La Ejecución (Qwen 2.5 Coder vía Ollama):**
+   Cambias el motor de tu asistente para apuntar a la API local de Ollama (`http://localhost:11434`).
+   Dile al modelo local:
+   > *"Lee `plan_migracion.md` y empieza a ejecutar el paso 1. Crea los archivos SQL y los archivos de test de Jest. No pienses en la arquitectura, solo sigue el plan estrictamente."*
+
+   *Costo:* $0.00. Ejecución infinita, rápida y totalmente privada en tu Mac.
+
+### Ventajas del Patrón para QAs
+- **Test Generation a granel:** Claude diseña la suite de pruebas (boundary values, equivalence partitioning). Ollama escribe los 200 archivos `.spec.ts` repetitivos copiando el patrón exacto.
+- **Data Scrubbing:** Ollama limpia logs sensibles o genera PII falsa (datos sintéticos) sin enviar información de tus clientes a la nube de Anthropic. Claude analiza el resultado ya anonimizado.
+- **Linting Automático:** Dejas a un modelo pequeño local corriendo en loop arreglando warnings de ESLint y formateando código, preservando tus valiosos tokens de Claude para problemas de lógica de negocio real.
+
+> **Regla de Oro del Ecosistema Híbrido:** Si requiere creatividad, intuición de diseño o resolver un bug abstracto → **Claude**. Si requiere fuerza bruta, formateo masivo, o extracción de datos mecánicos sin contexto profundo → **Ollama**.

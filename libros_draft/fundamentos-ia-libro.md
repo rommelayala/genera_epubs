@@ -132,6 +132,20 @@ El modelo tiene conocimiento hasta su fecha de corte (cutoff date). Lo que ocurr
 
 ---
 
+## Arquitectura No-Determinista: Programando con Probabilidades
+
+El choque más duro para un developer entrando a IA es el cambio de paradigma.
+En código tradicional: `A + B = C` (100% de las veces).
+En IA: `A + B = C` (95% de las veces), `A + B = D` (4% de las veces), `A + B = 🐘` (1% de las veces).
+
+**¿Cómo diseñas sistemas robustos con componentes no deterministas?**
+
+1. **Fallbacks gracefully:** Si la llamada al LLM falla, tarda demasiado, o devuelve basura inparseable, tu sistema debe tener un fallback determinista. (Ej: Si el LLM no puede categorizar la transacción, devuélvela como "Otros" en vez de crashear).
+2. **Retry Policies (Circuit Breakers):** A diferencia de una DB local, los LLMs fallan por rate limits, timeout o filtros de contenido. Implementa backoffs exponenciales.
+3. **Decoupling (Desacoplamiento):** Nunca pongas una llamada de LLM de 15 segundos en el medio del hilo principal de una UI. Usa colas (RabbitMQ, SQS) o WebSockets.
+
+---
+
 <a name="vocabulario"></a>
 # 3. Vocabulario Esencial — Las 20 Palabras que Debes Dominar
 
@@ -1531,6 +1545,21 @@ El LLM produce un prompt más estructurado y completo del que habrías escrito t
 
 ---
 
+## Structured Outputs: La pesadilla del JSON
+
+El mayor dolor de cabeza técnico al integrar IA no es el prompt, es el parseo de la respuesta.
+Necesitas que el LLM devuelva un JSON para que tu código lo use, pero a veces devuelve:
+`Claro, aquí tienes tu JSON:\n\n{"nombre": "Rommel"}\n\n¡Espero que te sirva!`
+Ese texto extra rompe tu `JSON.parse()`.
+
+**Niveles de madurez para extraer datos:**
+
+1. **Nivel Principiante (Frágil):** Pedirlo en el prompt. "Responde SOLO con JSON válido". Funciona el 90% de las veces. Falla en el peor momento.
+2. **Nivel Intermedio (Mejor):** Usar `JSON Mode` en la API (OpenAI/Anthropic lo soportan). El modelo está forzado a devolver un string que es parseable, pero no garantiza el esquema (podría inventar llaves).
+3. **Nivel Enterprise (Tool Calling):** La técnica definitiva. Definis una "herramienta" con un JSON Schema estricto (usando Pydantic o Zod) y obligas al modelo a "llamar" a esa herramienta. El modelo no tiene opción: el motor interno fuerza que los tipos coincidan. Si pides un Enum, te dará un Enum.
+
+---
+
 <a name="agentes-avanzado"></a>
 # 16. Sistemas Agénticos — Arquitecturas Avanzadas
 
@@ -1817,6 +1846,21 @@ Para cada categoría: documenta el ataque, la respuesta del sistema, y si es un 
 
 ---
 
+## Multimodalidad Aplicada: El futuro del QA Visual (VLM)
+
+Como QA, sabes que Cypress o Playwright son excelentes para verificar que el DOM tiene la clase `.btn-primary`. Pero el DOM no sabe si ese botón está tapado por un popup z-index roto, o si el color de contraste es ilegible.
+
+Aquí entran los **Vision-Language Models (VLM)**.
+
+Modelos como Claude 3.5 Sonnet o GPT-4o pueden "ver" imágenes. El pipeline moderno de E2E QA en 2026 funciona así:
+1. Playwright navega la app y toma un screenshot (full page).
+2. Se envía el screenshot al VLM con el prompt: *"Actúa como QA. Analiza esta UI. ¿Hay algún elemento superpuesto, texto cortado o problema de alineación grave?"*
+3. El VLM devuelve un JSON con las coordenadas de los errores visuales.
+
+La IA no reemplaza a Playwright, le da **ojos**.
+
+---
+
 <a name="seguridad"></a>
 # 18. Seguridad en IA — OWASP para LLMs
 
@@ -2093,6 +2137,24 @@ Negocio:
 - Tasa de satisfacción del usuario
 - Tasa de re-intentos (usuario pidió lo mismo dos veces = output insatisfactorio)
 ```
+
+---
+
+## La Magia Negra del Context Caching (Prompt Caching)
+
+Hasta hace poco, enviar el mismo documento de 1000 páginas o el repositorio de código entero en cada petición era ruinoso. Pagabas miles de tokens de input una y otra vez.
+
+**El Context Caching lo cambió todo.**
+Sistemas como Anthropic y Google permiten "cachear" la primera parte de tu prompt. 
+Si pones el `System Prompt` gigante y los manuales de la empresa al principio, la API los guarda en memoria (generalmente por 5 minutos o más).
+
+**El impacto real:**
+- Llamada 1 (sin cache): Envías 100K tokens = Cuesta $0.30 y tarda 10 segundos en procesar (Time to First Token).
+- Llamada 2 (cacheada): Envías los mismos 100K tokens = Cuesta $0.03 (-90%) y procesa en 0.1 segundos.
+
+**Arquitectura recomendada:** 
+Ordena tus prompts estrictamente de estático a dinámico.
+`[Instrucciones base] + [Documentos] + [CACHÉ MARKER] + [Pregunta del usuario]`
 
 ---
 

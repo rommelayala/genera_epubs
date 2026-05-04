@@ -1,0 +1,9 @@
+title: "Ubuntu en Modo Consola: Guía para Desarrolladores desde Mac/iPad/iPhone"
+author: "Rommel Ayala"
+description: "Guía práctica para dominar Ubuntu Server desde la terminal, conectándose vía SSH desde Mac, iPad e iPhone. Cubre navegación web, monitorización, editores, desarrollo, IA local con Ollama y productividad real."
+language: "es-ES"
+date: "2026-05-03"
+cover:
+  image: "ubuntu-consola-dev.jpg"
+  title: "Ubuntu en Modo Consola"
+  subtitle: "Guía para Desarrolladores desde Mac/iPad/iPhone"

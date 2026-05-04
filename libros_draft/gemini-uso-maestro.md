@@ -689,6 +689,43 @@ response = model.generate_content([
 
 ---
 
+## El Elefante Financiero: `CachedContent` API
+
+El mayor error al usar Gemini es aprovechar su ventana de 1M de tokens, pero pagar por ella en *cada* petición.
+Si usas `upload_file()` estándar y le haces 10 preguntas a un video de 1 hora, pagarás el costo de procesar ese video 10 veces.
+
+**La solución: Context Caching**
+
+La API de `CachedContent` permite subir un documento, video o repositorio gigante a la RAM de los servidores de Google y mantenerlo ahí por horas. Las peticiones subsecuentes que apuntan a esa caché pagan un costo drásticamente reducido (hasta -90%) y responden casi sin latencia (Time to First Token ultra rápido).
+
+```python
+import google.generativeai as genai
+from google.generativeai import caching
+import datetime
+
+# 1. Subir el archivo pesado (ej. un PDF de 1000 páginas)
+documento = genai.upload_file("spec_gigante.pdf")
+
+# 2. Crear la caché (vive por 1 hora por defecto)
+cache = caching.CachedContent.create(
+    model="models/gemini-1.5-pro-002",
+    system_instruction="Eres un QA Lead analizando especificaciones.",
+    contents=[documento],
+    ttl=datetime.timedelta(hours=1)
+)
+
+# 3. Usar el modelo cacheado (cuesta una fracción de los tokens)
+model = genai.GenerativeModel.from_cached_content(cached_content=cache)
+
+r1 = model.generate_content("Resume el capítulo 1")
+r2 = model.generate_content("¿Qué dice el capítulo 2 sobre la seguridad?")
+# Ambas peticiones son ultrarrápidas y baratas
+```
+
+**Regla de oro para QA:** Si tu contexto base (documentos, logs masivos, video) no va a cambiar durante la sesión de análisis y supera los 32K tokens, **siempre** usa la API de Caché.
+
+---
+
 ## Streaming — para respuestas largas
 
 ```python
@@ -727,6 +764,43 @@ casos = response.text  # JSON garantizado, sin markdown wrapper
 ```
 
 **Para QA esto es oro:** generar fixtures, casos de prueba, y datos estructurados sin tener que parsear markdown o JSON anidado en texto.
+
+---
+
+## Tool Calling: Dándole Manos a la IA
+
+`Structured Outputs` fuerza el formato, y `Code Execution` corre Python en los servidores de Google. Pero ¿qué pasa si necesitas que Gemini interactúe con *tus* sistemas internos (ej. tu base de datos o Jira)?
+
+Aquí entra el **Tool Calling (Function Calling)**.
+
+Tú le defines a Gemini qué funciones tienes disponibles. Gemini no las ejecuta; Gemini razona y te responde: *"Para responder a tu pregunta, necesito que ejecutes esta función con estos parámetros"*. Tú la ejecutas localmente y le devuelves el resultado.
+
+### El flujo de Tool Calling para QA
+
+```python
+# 1. Defines tu herramienta local
+def consultar_estado_jira(ticket_id: str) -> str:
+    """Consulta el estado actual de un ticket en Jira."""
+    # Lógica real de API de Jira aquí
+    return "EN PROGRESO"
+
+# 2. Se la pasas a Gemini
+model = genai.GenerativeModel(
+    model_name="gemini-2.5-pro",
+    tools=[consultar_estado_jira] # El SDK convierte la firma a JSON Schema
+)
+
+chat = model.start_chat()
+
+# 3. Gemini decide usar la herramienta
+response = chat.send_message("¿En qué estado está el bug PROJ-1234?")
+# Gemini responde internamente con un `function_call` en lugar de texto
+
+# 4. El SDK de Python puede ejecutarla automáticamente (si configuras enable_automatic_function_calling=True)
+# o puedes extraer los parámetros, ejecutar tu código y devolverle el resultado a Gemini.
+```
+
+Este es el bloque de construcción fundamental para crear **Agentes QA** autónomos.
 
 ---
 
@@ -997,6 +1071,34 @@ Identifica SOLO los cambios visuales que podrían ser regresiones
 Ignora cambios de datos dinámicos (fechas, precios, IDs).
 Formato: tabla con Elemento | Antes | Después | ¿Regresión probable?"
 ```
+
+---
+
+## QA en Tiempo Real con la API Multimodal (Live API)
+
+La revolución de finales de 2024 fue la **Multimodal Live API** (inspirada en Project Astra). Permite abrir un socket bidireccional de baja latencia con Gemini enviando y recibiendo voz y video frame a frame.
+
+En lugar de hacer E2E visual tomando screenshots después de cada click, el futuro del QA es el streaming en vivo.
+
+```python
+# Flujo conceptual (Pseudocódigo)
+# 1. Conectas la salida de video de tu entorno de test a Gemini Live
+with client.aio.live.connect(model="gemini-2.0-flash-exp") as session:
+    
+    # 2. Envías el prompt inicial por audio/texto
+    await session.send("Eres un tester manual. Voy a ejecutar un script de Cypress. Observa el video en vivo y dime '¡ALTO!' por voz si ves algún glitch visual o superposición de Z-index.")
+    
+    # 3. Envías frames de video en tiempo real mientras corre tu test
+    async for frame in test_runner.stream_video():
+        await session.send(frame)
+        
+    # 4. Gemini responde en tiempo real
+    async for response in session.receive():
+        if response.audio:
+            reproducir(response.audio) # Gemini hablando: "¡Alto! El botón de pago acaba de desaparecer detrás del footer"
+```
+
+Este patrón convierte a Playwright/Cypress en las "manos" y a Gemini Live en los "ojos", operando a velocidades humanas pero escalables.
 
 ---
 

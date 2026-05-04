@@ -4,6 +4,7 @@ description: "El libro del QA que quiere dominar el navegador. Testing avanzado 
 language: "es-ES"
 date: "2026"
 cover:
+  image: "playwright-ts-intermedio-avanzado.jpg"
   title: "Playwright + TypeScript"
   subtitle: "Nivel Intermedio-Avanzado"
 

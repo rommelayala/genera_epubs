@@ -4,6 +4,7 @@ language: "es-ES"
 description: "Guía completa para dominar Claude: API, prompting y casos de uso avanzados."
 
 cover:
+  image: "claude-uso-maestro.jpg"
   title: "Claude - Uso Maestro"
   subtitle: "De principiante a experto"
   bg_color: "#1a1a2e"
@@ -20,10 +21,4 @@ sources:
     title: "Documentación Oficial de Claude"
     title_level: 1
     selector: "main"
-    on_error: skip
-
-  - type: pdf
-    path: libros_draft/claude-reference.pdf
-    title: "Referencia Técnica"
-    title_level: 1
     on_error: skip

@@ -1,0 +1,122 @@
+🔧 Instalando dependencias Python...
+
+[notice] A new release of pip is available: 25.1.1 -> 26.1
+[notice] To update, run: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/.venv/bin/python -m pip install --upgrade pip
+🚀 Ejecutando generate_epub.py...
+📚 Descubiertos 11 libros: 1 markdown, 0 PDF, 10 compilados (yaml).
+🚀 Procesando en paralelo...
+
+[git-libro] 🖼️  Portada: git-libro.jpg
+[gemini-uso-maestro] 🖼️  Portada: gemini-uso-maestro.jpg
+[fundamentos-ia-libro] 🖼️  Portada: fundamentos-ia-libro.jpg
+[playwright-ts-intermedio-avanzado] 🖼️  Portada: playwright-ts-intermedio-avanzado.jpg
+[gemini-image-generation-api] 🖼️  Portada: gemini-image-generation-api.jpg
+[skills-libro] 🖼️  Portada: skills-libro.jpg
+[gemini-nano-on-device-ai] 🖼️  Portada: gemini-nano-on-device-ai.jpg
+[entrena-tu-ia-local] 🖼️  Portada: entrena-tu-ia-local.jpg
+[agentes-ia-libro] 🖼️  Portada: agentes-ia-libro.jpg
+[claude-uso-maestro] 🖼️  Portada: claude-uso-maestro.jpg
+[ubuntu-consola-dev] 🖼️  Portada: ubuntu-consola-dev.jpg
+[ubuntu-consola-dev] 🔄 Convirtiendo (.md → epub)...
+[git-libro] 🧩 Compilando 1 fuentes...
+[fundamentos-ia-libro] 🧩 Compilando 1 fuentes...
+[gemini-uso-maestro] 🧩 Compilando 1 fuentes...
+[skills-libro] 🧩 Compilando 1 fuentes...
+[claude-uso-maestro] 🧩 Compilando 3 fuentes...
+[playwright-ts-intermedio-avanzado] 🧩 Compilando 1 fuentes...
+[agentes-ia-libro] 🧩 Compilando 4 fuentes...
+[gemini-image-generation-api] 🧩 Compilando 1 fuentes...
+[claude-uso-maestro] ❌ Falló compilación multi-fuente: Source[2]: path 'libros_draft/claude-reference.pdf' no encontrado en '/Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/claude-reference.pdf'
+[gemini-nano-on-device-ai] 🧩 Compilando 1 fuentes...
+[fundamentos-ia-libro] (1/1) ingiriendo markdown: libros_draft/fundamentos-ia-libro.md
+[agentes-ia-libro] ❌ Falló compilación multi-fuente: Source[1]: path 'libros_draft/agentes-ia-00-prólogo.yaml' no encontrado en '/Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/agentes-ia-00-prólogo.yaml'
+[entrena-tu-ia-local] 🧩 Compilando 1 fuentes...
+[git-libro] (1/1) ingiriendo markdown: libros_draft/git-libro.md
+[gemini-uso-maestro] (1/1) ingiriendo markdown: libros_draft/gemini-uso-maestro.md
+[gemini-image-generation-api] (1/1) ingiriendo markdown: libros_draft/gemini-image-generation-api.md
+[skills-libro] (1/1) ingiriendo markdown: libros_draft/skills-libro.md
+[gemini-nano-on-device-ai] (1/1) ingiriendo markdown: libros_draft/gemini-nano-on-device-ai.md
+[fundamentos-ia-libro] 🔄 Convirtiendo (.md → epub)...
+[playwright-ts-intermedio-avanzado] (1/1) ingiriendo markdown: libros_draft/playwright-ts-intermedio-avanzado.md
+[git-libro] 🔄 Convirtiendo (.md → epub)...
+[skills-libro] 🔄 Convirtiendo (.md → epub)...
+[entrena-tu-ia-local] (1/1) ingiriendo markdown: libros_draft/entrena-tu-ia-local.md
+[gemini-nano-on-device-ai] 🔄 Convirtiendo (.md → epub)...
+[playwright-ts-intermedio-avanzado] 🔄 Convirtiendo (.md → epub)...
+DEBUG: =============== LIBRO DE TEXTO =================================
+DEBUG: Input path: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/ubuntu-consola-dev.md
+DEBUG: Config: BookConfig(title='Ubuntu en Modo Consola: Guía para Desarrolladores desde Mac/iPad/iPhone', author='Rommel Ayala', description='Guía práctica para dominar Ubuntu Server desde la terminal, conectándose vía SSH desde Mac, iPad e iPhone. Cubre navegación web, monitorización, editores, desarrollo, IA local con Ollama y productividad real.', language='es-ES', date='2026-05-03', ai_model='', cover=CoverConfig(title='Ubuntu en Modo Consola', subtitle='Guía para Desarrolladores desde Mac/iPad/iPhone', bg_color='#151515', text_color='#EAEAEA', accent_color='#4A4A4A', title_size=42, subtitle_size=24, footer='© Rommel Ayala - All rights reserved', image='ubuntu-consola-dev.jpg'), audio=AudioConfig(voice='', rate='-5%', volume='+0%', pitch='+0Hz', bitrate='96k', chapter_pause=1.5, concurrency=5, intro=True, outro=True), sources=[])
+DEBUG: Cover: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/portadas_draft/ubuntu-consola-dev.jpg
+DEBUG: Output: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/epubs_generados/ubuntu-consola-dev.epub
+DEBUG: Output format: epub
+DEBUG: ==================================================
+DEBUG: =============== LIBRO DE TEXTO =================================
+DEBUG: Input path: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/fundamentos-ia-libro_compiled.md
+DEBUG: Config: BookConfig(title='Fundamentos de IA para Profesionales del Código', author='Rommel Ayala', description='El libro para developers que empiezan desde cero en inteligencia artificial. Conceptos fundamentales explicados para programadores.', language='es-ES', date='2026', ai_model='', cover=CoverConfig(title='Fundamentos de IA', subtitle='Para Profesionales del Código', bg_color='#151515', text_color='#EAEAEA', accent_color='#4A4A4A', title_size=42, subtitle_size=24, footer='© Rommel Ayala - All rights reserved', image='fundamentos-ia-libro.jpg'), audio=AudioConfig(voice='', rate='-5%', volume='+0%', pitch='+0Hz', bitrate='96k', chapter_pause=1.5, concurrency=5, intro=True, outro=True), sources=[SourceConfig(type='markdown', path='libros_draft/fundamentos-ia-libro.md', url='', selector='', transcription_service='whisper', prefer_subtitles=True, title='', title_level=1, on_error='skip', model='')])
+DEBUG: Cover: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/portadas_draft/fundamentos-ia-libro.jpg
+DEBUG: Output: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/epubs_generados/fundamentos-ia-libro.epub
+DEBUG: Output format: epub
+DEBUG: ==================================================
+DEBUG: =============== LIBRO DE TEXTO =================================
+DEBUG: Input path: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/git-libro_compiled.md
+DEBUG: Config: BookConfig(title='Git Uso Maestro — De Usuario Principiante a Casi experto V2', author='Rommel Ayala', description='Guía completa para dominar Git con framework 5W1H y perfil QA. De uso casual a casi experto.', language='es-ES', date='2026', ai_model='', cover=CoverConfig(title='Git Uso Maestro', subtitle='De Usuario Principiante a Casi experto', bg_color='#151515', text_color='#EAEAEA', accent_color='#4A4A4A', title_size=42, subtitle_size=24, footer='© Rommel Ayala - All rights reserved', image='git-libro.jpg'), audio=AudioConfig(voice='', rate='-5%', volume='+0%', pitch='+0Hz', bitrate='96k', chapter_pause=1.5, concurrency=5, intro=True, outro=True), sources=[SourceConfig(type='markdown', path='libros_draft/git-libro.md', url='', selector='', transcription_service='whisper', prefer_subtitles=True, title='', title_level=1, on_error='skip', model='')])
+DEBUG: Cover: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/portadas_draft/git-libro.jpg
+DEBUG: Output: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/epubs_generados/git-libro.epub
+DEBUG: Output format: epub
+DEBUG: ==================================================
+DEBUG: =============== LIBRO DE TEXTO =================================
+DEBUG: Input path: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/skills-libro_compiled.md
+DEBUG: Config: BookConfig(title='Skills de IA — De la Teoría al Poder Real', author='Rommel Ayala', description='Libro-curso-tutorial sobre skills de IA usando el framework 5W1H. Habilidades prácticas para aplicar inteligencia artificial.', language='es-ES', date='2026', ai_model='', cover=CoverConfig(title='Skills de IA', subtitle='De la Teoría al Poder Real', bg_color='#151515', text_color='#EAEAEA', accent_color='#4A4A4A', title_size=42, subtitle_size=24, footer='© Rommel Ayala - All rights reserved', image='skills-libro.jpg'), audio=AudioConfig(voice='', rate='-5%', volume='+0%', pitch='+0Hz', bitrate='96k', chapter_pause=1.5, concurrency=5, intro=True, outro=True), sources=[SourceConfig(type='markdown', path='libros_draft/skills-libro.md', url='', selector='', transcription_service='whisper', prefer_subtitles=True, title='', title_level=1, on_error='skip', model='')])
+DEBUG: Cover: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/portadas_draft/skills-libro.jpg
+DEBUG: Output: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/epubs_generados/skills-libro.epub
+DEBUG: Output format: epub
+DEBUG: ==================================================
+DEBUG: =============== LIBRO DE TEXTO =================================
+DEBUG: Input path: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/gemini-nano-on-device-ai_compiled.md
+DEBUG: Config: BookConfig(title='Gemini Nano — IA on-device desde cero hasta producción', author='Rommel Ayala', description='Curso práctico sobre Gemini Nano para ejecutar modelos de IA directamente en dispositivos, sin conexión a la nube.', language='es-ES', date='2026', ai_model='', cover=CoverConfig(title='Gemini Nano', subtitle='IA on-device desde cero hasta producción', bg_color='#151515', text_color='#EAEAEA', accent_color='#4A4A4A', title_size=42, subtitle_size=24, footer='© Rommel Ayala - All rights reserved', image='gemini-nano-on-device-ai.jpg'), audio=AudioConfig(voice='', rate='-5%', volume='+0%', pitch='+0Hz', bitrate='96k', chapter_pause=1.5, concurrency=5, intro=True, outro=True), sources=[SourceConfig(type='markdown', path='libros_draft/gemini-nano-on-device-ai.md', url='', selector='', transcription_service='whisper', prefer_subtitles=True, title='', title_level=1, on_error='skip', model='')])
+DEBUG: Cover: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/portadas_draft/gemini-nano-on-device-ai.jpg
+DEBUG: Output: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/epubs_generados/gemini-nano-on-device-ai.epub
+DEBUG: Output format: epub
+DEBUG: ==================================================
+DEBUG: =============== LIBRO DE TEXTO =================================
+DEBUG: Input path: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/playwright-ts-intermedio-avanzado_compiled.md
+DEBUG: Config: BookConfig(title='Playwright + TypeScript: Nivel Intermedio-Avanzado', author='Rommel Ayala', description='El libro del QA que quiere dominar el navegador. Testing avanzado con Playwright y TypeScript.', language='es-ES', date='2026', ai_model='', cover=CoverConfig(title='Playwright + TypeScript', subtitle='Nivel Intermedio-Avanzado', bg_color='#151515', text_color='#EAEAEA', accent_color='#4A4A4A', title_size=42, subtitle_size=24, footer='© Rommel Ayala - All rights reserved', image='playwright-ts-intermedio-avanzado.jpg'), audio=AudioConfig(voice='', rate='-5%', volume='+0%', pitch='+0Hz', bitrate='96k', chapter_pause=1.5, concurrency=5, intro=True, outro=True), sources=[SourceConfig(type='markdown', path='libros_draft/playwright-ts-intermedio-avanzado.md', url='', selector='', transcription_service='whisper', prefer_subtitles=True, title='', title_level=1, on_error='skip', model='')])
+DEBUG: Cover: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/portadas_draft/playwright-ts-intermedio-avanzado.jpg[gemini-uso-maestro] 🔄 Convirtiendo (.md → epub)...
+[entrena-tu-ia-local] 🔄 Convirtiendo (.md → epub)...
+[gemini-image-generation-api] 🔄 Convirtiendo (.md → epub)...
+[git-libro] ✅ epubs_generados/git-libro.epub
+[skills-libro] ✅ epubs_generados/skills-libro.epub
+[gemini-nano-on-device-ai] ✅ epubs_generados/gemini-nano-on-device-ai.epub
+[gemini-uso-maestro] ✅ epubs_generados/gemini-uso-maestro.epub
+[fundamentos-ia-libro] ✅ epubs_generados/fundamentos-ia-libro.epub
+[ubuntu-consola-dev] ✅ epubs_generados/ubuntu-consola-dev.epub
+[gemini-image-generation-api] ✅ epubs_generados/gemini-image-generation-api.epub
+[playwright-ts-intermedio-avanzado] ✅ epubs_generados/playwright-ts-intermedio-avanzado.epub
+[entrena-tu-ia-local] ✅ epubs_generados/entrena-tu-ia-local.epub
+
+⚠️  9/11 libros generados. Revisa los errores arriba.
+
+DEBUG: Output: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/epubs_generados/playwright-ts-intermedio-avanzado.epub
+DEBUG: Output format: epub
+DEBUG: ==================================================
+DEBUG: =============== LIBRO DE TEXTO =================================
+DEBUG: Input path: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/gemini-uso-maestro_compiled.md
+DEBUG: Config: BookConfig(title='Gemini Uso Maestro — De Usuario Casual a Operador de Élite', author='Rommel Ayala', description='Guía completa para dominar Gemini con framework 5W1H y perfil QA. De uso casual a operador avanzado.', language='es-ES', date='2026', ai_model='', cover=CoverConfig(title='Gemini Uso Maestro', subtitle='De Usuario Casual a Operador de Élite', bg_color='#151515', text_color='#EAEAEA', accent_color='#4A4A4A', title_size=42, subtitle_size=24, footer='© Rommel Ayala - All rights reserved', image='gemini-uso-maestro.jpg'), audio=AudioConfig(voice='', rate='-5%', volume='+0%', pitch='+0Hz', bitrate='96k', chapter_pause=1.5, concurrency=5, intro=True, outro=True), sources=[SourceConfig(type='markdown', path='libros_draft/gemini-uso-maestro.md', url='', selector='', transcription_service='whisper', prefer_subtitles=True, title='', title_level=1, on_error='skip', model='')])
+DEBUG: Cover: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/portadas_draft/gemini-uso-maestro.jpg
+DEBUG: Output: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/epubs_generados/gemini-uso-maestro.epub
+DEBUG: Output format: epub
+DEBUG: ==================================================
+DEBUG: =============== LIBRO DE TEXTO =================================
+DEBUG: Input path: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/entrena-tu-ia-local_compiled.md
+DEBUG: Config: BookConfig(title='Entrena tu Propia IA en Local: Aprendizaje Autónomo con Recursos Limitados', author='Rommel Ayala', description='Guía práctica completa para entrenar, fine-tunear y mejorar modelos de IA localmente con GPU de 8-16GB. Aprende RAG, QLoRA, destilación de conocimiento, fusión de modelos y automatización de ciclos de mejora continua.', language='es-ES', date='2026', ai_model='', cover=CoverConfig(title='Entrena tu IA en Local', subtitle='Ciclo Autónomo de Mejora Continua', bg_color='#0d1117', text_color='#f0f6fc', accent_color='#58a6ff', title_size=48, subtitle_size=26, footer='© Rommel Ayala — Aprendizaje con Recursos Limitados', image='entrena-tu-ia-local.jpg'), audio=AudioConfig(voice='', rate='-5%', volume='+0%', pitch='+0Hz', bitrate='96k', chapter_pause=1.5, concurrency=5, intro=True, outro=True), sources=[SourceConfig(type='markdown', path='libros_draft/entrena-tu-ia-local.md', url='', selector='', transcription_service='whisper', prefer_subtitles=True, title='Contenido Completo del Libro', title_level=1, on_error='skip', model='')])
+DEBUG: Cover: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/portadas_draft/entrena-tu-ia-local.jpg
+DEBUG: Output: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/epubs_generados/entrena-tu-ia-local.epub
+DEBUG: Output format: epub
+DEBUG: ==================================================
+DEBUG: =============== LIBRO DE TEXTO =================================
+DEBUG: Input path: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/libros_draft/gemini-image-generation-api_compiled.md
+DEBUG: Config: BookConfig(title='Gemini Image Generation API — Guía Completa de Generación de Imágenes con IA', author='Rommel Ayala', description='Curso-tutorial exhaustivo de generación de imágenes con Gemini. De cero a producción con ejemplos en Python, JavaScript, Go, Java y REST.', language='es-ES', date='2026', ai_model='', cover=CoverConfig(title='Gemini Image Generation API', subtitle='Guía Completa de Generación de Imágenes con IA', bg_color='#151515', text_color='#EAEAEA', accent_color='#4A4A4A', title_size=42, subtitle_size=24, footer='© Rommel Ayala - All rights reserved', image='gemini-image-generation-api.jpg'), audio=AudioConfig(voice='', rate='-5%', volume='+0%', pitch='+0Hz', bitrate='96k', chapter_pause=1.5, concurrency=5, intro=True, outro=True), sources=[SourceConfig(type='markdown', path='libros_draft/gemini-image-generation-api.md', url='', selector='', transcription_service='whisper', prefer_subtitles=True, title='', title_level=1, on_error='skip', model='')])
+DEBUG: Cover: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/portadas_draft/gemini-image-generation-api.jpg
+DEBUG: Output: /Users/rommel/Documents/project/Rommel/level-3/genera_epubs/epubs_generados/gemini-image-generation-api.epub
+DEBUG: Output format: epub
+DEBUG: ==================================================

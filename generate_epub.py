@@ -162,6 +162,8 @@ def main() -> None:
         # 1. Buscar YAMLs con sources
         for f in _DRAFTS_DIR.glob("*.yaml"):
             try:
+                if f.stem.endswith("_compiled"):
+                    continue
                 config = load_config(f)
                 if config.sources:
                     discovered[f.stem] = f
@@ -171,7 +173,7 @@ def main() -> None:
         # 2. Buscar resto de extensiones
         for ext in INPUT_EXTENSIONS:
             for f in _DRAFTS_DIR.glob(f"*{ext}"):
-                if f.stem not in discovered:
+                if f.stem not in discovered and not f.stem.endswith("_compiled"):
                     discovered[f.stem] = f
                     
         files = list(discovered.values())
